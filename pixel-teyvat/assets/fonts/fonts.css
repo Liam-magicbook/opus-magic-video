@@ -1,0 +1,15 @@
+/* Fonts used by the Teyvat pixel film (paths relative to the project root). */
+@font-face {
+  font-family: 'Fusion Pixel 12';
+  src: url('/assets/fonts/cjk/fusionpixel/fusion-pixel-12px-proportional-zh_hans.ttf') format('truetype');
+  font-weight: 1 1000;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('/assets/fonts/latin/pressstart2p/PressStart2P-Regular.ttf') format('truetype');
+  font-weight: 1 1000;
+  font-style: normal;
+  font-display: block;
+}

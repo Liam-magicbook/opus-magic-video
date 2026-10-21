@@ -1,0 +1,9 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+# verification scratch frames (regenerable via tools/hero_check.mjs); work/attachments stays tracked
+work/*.png
+work/*.json

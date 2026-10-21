@@ -1,0 +1,22 @@
+/* Fonts used by the splash film (paths relative to the project root). */
+@font-face {
+  font-family: 'LXGW Marker Gothic';
+  src: url('/assets/fonts/cjk/lxgwmarkergothic/LXGWMarkerGothic-Regular.ttf') format('truetype');
+  font-weight: 1 1000;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Long Cang';
+  src: url('/assets/fonts/cjk/longcang/LongCang-Regular.ttf') format('truetype');
+  font-weight: 1 1000;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Caveat';
+  src: url('/assets/fonts/latin/caveat/Caveat-VF.ttf') format('truetype');
+  font-weight: 1 1000;
+  font-style: normal;
+  font-display: block;
+}

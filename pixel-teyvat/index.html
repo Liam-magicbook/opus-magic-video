@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>提瓦特 · TEYVAT — pixel quest</title>
+<link rel="stylesheet" href="/assets/fonts/fonts.css">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block;width:1920px;height:1080px}</style>
+</head><body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script type="module">
+  await document.fonts.load('12px "Fusion Pixel 12"', '欢迎来到提瓦特！派蒙不是应急食品风神瞳宝箱提瓦特大陆探险');
+  await document.fonts.load('8px "Press Start 2P"', 'MORA PRESS START TEYVAT x0123456789');
+  await document.fonts.ready;
+  await import('/js/scene.js');
+  window.__ready = true;
+</script>
+</body></html>

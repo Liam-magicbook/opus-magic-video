@@ -1,0 +1,6 @@
+{ "name": "cel-boil-splash", "private": true, "type": "module",
+  "dependencies": {
+    "opentype.js": "2.0.0",
+    "puppeteer-core": "25.12.0",
+    "simplex-noise": "4.0.3"
+  } }

@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>DeepSeek V4.1 Flash · 硬核拆解</title>
+<style>
+@font-face{font-family:'Alibaba PuHuiTi';src:url('./assets/fonts/AlibabaPuHuiTi-3-115-Black.woff2') format('woff2');font-weight:1000;font-display:block}
+@font-face{font-family:'Alibaba PuHuiTi';src:url('./assets/fonts/AlibabaPuHuiTi-3-105-Heavy.woff2') format('woff2');font-weight:900;font-display:block}
+@font-face{font-family:'Alibaba PuHuiTi';src:url('./assets/fonts/AlibabaPuHuiTi-3-85-Bold.woff2') format('woff2');font-weight:700;font-display:block}
+@font-face{font-family:'Alibaba PuHuiTi';src:url('./assets/fonts/AlibabaPuHuiTi-3-65-Medium.woff2') format('woff2');font-weight:500;font-display:block}
+@font-face{font-family:'Alibaba PuHuiTi';src:url('./assets/fonts/AlibabaPuHuiTi-3-55-Regular.woff2') format('woff2');font-weight:400;font-display:block}
+@font-face{font-family:'Inter';src:url('./assets/fonts/Inter-VF.ttf') format('truetype');font-weight:100 900;font-display:block}
+@font-face{font-family:'JetBrains Mono';src:url('./assets/fonts/JetBrainsMono-VF.ttf') format('truetype');font-weight:100 800;font-display:block}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#10161C}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;background:#E9EEF2}
+#world{position:absolute;left:0;top:0;width:1920px;height:5900px;transform-origin:0 0}
+#ground{position:absolute;left:0;top:0;width:1920px;height:5900px;
+  background-image:radial-gradient(circle,#C6D1DB 2.1px,transparent 2.7px);background-size:46px 46px}
+#grain{position:absolute;inset:0;pointer-events:none;opacity:.16;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='240' height='240' filter='url(%23n)' opacity='.55'/></svg>")}
+#vig{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(126% 96% at 44% 48%,rgba(233,238,242,0) 46%,rgba(196,208,219,.28) 100%)}
+.a{position:absolute;left:0;top:0}
+.zh{font-family:'Alibaba PuHuiTi',sans-serif}
+.in{font-family:'Inter',sans-serif;font-feature-settings:'tnum' 1,'case' 1}
+.mo{font-family:'JetBrains Mono',monospace;font-feature-settings:'tnum' 1}
+.mask{position:absolute;overflow:hidden}
+.card{position:absolute;background:#F7F9FB;border-radius:14px;box-shadow:inset 0 0 0 2px #CFD9E1}
+#hud,#end{position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none}
+</style></head>
+<body><div id="stage">
+  <div id="world"><div id="ground"></div></div>
+  <div id="grain"></div>
+  <div id="vig"></div>
+  <div id="hud"></div>
+  <div id="end"></div>
+</div>
+<script src="./node_modules/d3/dist/d3.min.js"></script>
+<script type="module">
+const cues=await fetch('./cues.json',{cache:'no-store'}).then(r=>r.json());
+const EV=cues.ev;
+window.DEMO={width:1920,height:1080,fps:30,duration:60,motionBlur:{samples:2,shutter:0.5}};
+/* ---------------- helpers ---------------- */
+const clamp=(x,a=0,b=1)=>x<a?a:x>b?b:x, lerp=(a,b,u)=>a+(b-a)*u, P=(t,a,d)=>clamp((t-a)/d);
+const oC=u=>1-Math.pow(1-u,3), oQ=u=>1-Math.pow(1-u,4), oX=u=>u>=1?1:1-Math.pow(2,-10*u), iQ=u=>u*u,
+  ioC=u=>u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2, ioS=u=>-(Math.cos(Math.PI*u)-1)/2,
+  oB=(u,s=1.7)=>1+(s+1)*Math.pow(u-1,3)+s*Math.pow(u-1,2);
+function bez(x1,y1,x2,y2){return u=>{if(u<=0)return 0;if(u>=1)return 1;let t=u;for(let i=0;i<8;i++){const cx=3*x1*t*(1-t)**2+3*x2*t*t*(1-t)+t**3-u;const d=3*x1*(1-t)**2+6*(x2-x1)*t*(1-t)+3*(1-x2)*t*t;if(Math.abs(d)<1e-6)break;t=clamp(t-cx/d);}return 3*y1*t*(1-t)**2+3*y2*t*t*(1-t)+t**3;};}
+const eFly=bez(.62,0,.22,1), eMark=bez(.16,.94,.18,1);
+const wob=(dt,f=5,k=11)=>dt<0?0:Math.exp(-k*dt)*Math.cos(2*Math.PI*f*dt);
+const mixc=(a,b,u)=>{const A=a.match(/\w\w/g).map(h=>parseInt(h,16)),B=b.match(/\w\w/g).map(h=>parseInt(h,16));return`rgb(${A.map((v,i)=>Math.round(lerp(v,B[i],u))).join(',')})`;};
+const INK='25313D',MID='8C9AA8',OR='FF5A36',CARD='F7F9FB';
+const world=document.getElementById('world'), hud=document.getElementById('hud'), endL=document.getElementById('end');
+const el=(tag,cls,parent,css,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(css)e.style.cssText=css;if(html!=null)e.innerHTML=html;(parent||world).appendChild(e);return e;};
+const SVGNS='http://www.w3.org/2000/svg';
+const sv=(tag,attrs,parent)=>{const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);parent.appendChild(e);return e;};
+const U=[];
+const shadow=(lift,a=.26)=>`drop-shadow(0 ${(6+30*lift).toFixed(1)}px ${(10+30*lift).toFixed(1)}px rgba(22,34,46,${(a-0.08*lift).toFixed(3)}))`;
+function slap(t,land,dur=.2,amp=.3){const p=(t-(land-dur))/dur;if(p<0)return{o:0,s:1+amp,r:6,lift:1};
+  if(p<1){const L=1-iQ(p);return{o:clamp(p*5),s:1+amp*L,r:6*L,lift:L};}
+  const w=wob(t-land,4.5,10);return{o:1,s:1-.035*w,r:-.8*w,lift:0};}
+/* ---------------- camera ---------------- */
+const CAM=cues.cam;
+const seg=[];
+for(let i=1;i<CAM.length;i++){const a=CAM[i-1],b=CAM[i];
+  seg.push({a,b,I:b.move==='fly'?d3.interpolateZoom.rho(.82)([a.x??960,a.y,1920/a.z],[b.x??960,b.y,1920/b.z]):null});}
+function cam(t){
+  if(t<=CAM[0].t)return{x:CAM[0].x??960,y:CAM[0].y,z:CAM[0].z};
+  for(const s of seg){if(t<=s.b.t){const u=(t-s.a.t)/(s.b.t-s.a.t);
+    if(s.I){const v=s.I(eFly(u));return{x:v[0],y:v[1],z:1920/v[2]};}
+    const e=ioS(u),ax=s.a.x??960,bx=s.b.x??960;
+    return{x:lerp(ax,bx,e),y:lerp(s.a.y,s.b.y,e),z:Math.exp(lerp(Math.log(s.a.z),Math.log(s.b.z),e))};}}
+  const l=CAM[CAM.length-1];return{x:l.x??960,y:l.y,z:l.z};}
+/* ---------------- section kit ---------------- */
+const SEC=[0,1080,2160,3240,4320];   // section tops in world space (1080 pitch; camera y = SEC+540)
+function kicker(x,y,num,zh,en,at){const k=el('div','a zh',world,`left:${x}px;top:${y}px;font:700 25px/1 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:34`,
+  `<span style="display:inline-block;width:17px;height:17px;background:#FF5A36;margin-right:13px;vertical-align:-1px"></span>${num} ${zh}<span style="font:600 17px 'JetBrains Mono';letter-spacing:.2em;color:#8C9AA8;margin-left:16px">${en}</span>`);
+  U.push(t=>{const u=oC(P(t,at,.42));k.style.opacity=u;k.style.transform=`translateY(${(1-u)*18}px)`;});return k;}
+function headline(x,y,lines,at,size,gap=1.18){const nodes=lines.map((ln,i)=>{
+  const m=el('div','mask',world,`left:${x-16}px;top:${y+i*size*gap-12}px;width:1600px;height:${size*1.38}px;z-index:32`);
+  const d=el('div','a zh',m,`left:16px;top:10px;font:900 ${size}px/1.14 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;letter-spacing:-.015em`,ln.t);
+  return{d,m,delay:i*.13};});
+  U.push(t=>nodes.forEach(n=>{const u=oX(P(t,at+n.delay,.6));n.d.style.transform=`translateY(${((1-u)*size*1.45).toFixed(1)}px)`;}));
+  return nodes;}
+function note(x,y,txt,at,w=1520){const n=el('div','a zh',world,`left:${x}px;top:${y}px;width:${w}px;font:500 23px/1.6 'Alibaba PuHuiTi';color:#5E6D7B;z-index:34`,txt);
+  U.push(t=>{const u=oC(P(t,at,.5));n.style.opacity=u;n.style.transform=`translateY(${(1-u)*12}px)`;});return n;}
+/* marker swipe inside a note: a second beat of motion while the section holds */
+const HL='<i style="position:absolute;left:-7px;right:-7px;bottom:1px;height:15px;background:#FF5A36;opacity:.26;transform-origin:0 50%;transform:scaleX(0);z-index:0"></i>';
+function noteHi(x,y,txt,hl,at,w=1520,delay=1.5){
+  const n=el('div','a zh',world,`left:${x}px;top:${y}px;width:${w}px;font:500 23px/1.6 'Alibaba PuHuiTi';color:#5E6D7B;z-index:34`,
+    txt.replace(hl,`<span style="position:relative;display:inline-block;isolation:isolate;color:#25313D">${HL}<span style="position:relative;z-index:1">${hl}</span></span>`));
+  const m=n.querySelector('i');
+  U.push(t=>{const u=oC(P(t,at,.5));n.style.opacity=u;n.style.transform=`translateY(${(1-u)*12}px)`;
+    const s=ioC(P(t,at+delay,.55));m.style.transform=`scaleX(${s})`;});return n;}
+function hairline(x,y,w,at,thick=3,col='#25313D',z=32){const r=el('div','a',world,`left:${x}px;top:${y}px;width:${w}px;height:${thick}px;background:${col};transform-origin:0 50%;z-index:${z}`);
+  U.push(t=>{r.style.transform=`scaleX(${oQ(P(t,at,.6))})`;});return r;}
+const DARKCHIP='height:52px;padding:0 22px;border-radius:9px;background:#25313D;color:#F7F9FB;font:700 23px/52px \'Alibaba PuHuiTi\';white-space:nowrap;z-index:34;transform-origin:50% 50%';
+const LINECHIP='height:50px;padding:0 20px;border-radius:8px;background:#F7F9FB;box-shadow:inset 0 0 0 2px #CFD9E1;color:#25313D;font:700 21px/50px \'Alibaba PuHuiTi\';white-space:nowrap;z-index:34;transform-origin:50% 50%';
+function chip(x,y,txt,land,style=DARKCHIP){const b=el('div','a zh',world,`left:${x}px;top:${y}px;${style}`);b.textContent=txt;
+  U.push(t=>{const s=slap(t,land,.16,.4);b.style.opacity=s.o;b.style.transform=`scale(${s.s}) rotate(${s.r*.5}deg)`;});return b;}
+
+/* ---- chapter cards: full-width paper bands that the camera flies past between sections ---- */
+const DIVS=[{y:1000,n:'01',zh:'结构',en:'ASYMMETRIC CED'},{y:2080,n:'02',zh:'缓存',en:'KV CACHE'},
+            {y:3160,n:'03',zh:'跑分',en:'BENCHMARKS'},{y:4240,n:'04',zh:'成本',en:'PRICING'}];
+DIVS.forEach(d=>{
+  const band=el('div','a',world,`left:0;top:${d.y}px;width:1920px;height:224px;background:#E9EEF2;opacity:0;z-index:26`);
+  const ln=el('div','a',band,'left:140px;top:0;width:1640px;height:2px;background:#25313D;opacity:.55');
+  const nn=el('div','a in',band,`left:138px;top:38px;font:900 78px/1 'Inter';letter-spacing:-.04em;color:#25313D`,d.n);
+  const zz=el('div','a zh',band,`left:${138+112}px;top:48px;font:900 40px/1 'Alibaba PuHuiTi';color:#25313D`,d.zh);
+  const ee=el('div','a mo',band,`left:${138+116}px;top:96px;font:600 14px 'JetBrains Mono';letter-spacing:.24em;color:#8C9AA8`,d.en);
+  const bl=el('div','a',band,'left:140px;top:150px;width:60px;height:4px;background:#FF5A36');
+  U.push((tt,C)=>{
+    const k=clamp((520-Math.abs(d.y+112-C.y))/210);
+    band.style.opacity=(k>.01?1:0);
+    band.style.transform=`translateY(${((1-k)*26).toFixed(1)}px)`;
+    band.style.clipPath=k>=1?'none':`inset(0 0 ${((1-k)*100).toFixed(1)}% 0)`;
+  });
+});
+/* ================= A · title ================= */
+{
+  const B=SEC[0];
+  kicker(140,B+96,'00','硬核拆解','DEEPSEEK · NO.001',EV.kick);
+  headline(140,B+148,[{t:'读得越多，'},{t:'为什么反而越便宜？'}],EV.title1,100,1.2);
+  const mk=el('div','a',world,`left:${140+100*5}px;top:${B+148+100*1.2+108}px;width:${100*3}px;height:20px;background:#FF5A36;transform-origin:0 50%;z-index:33`);
+  U.push(t=>{mk.style.transform=`scaleX(${ioC(P(t,EV.marker[0],EV.marker[1]-EV.marker[0]))})`;});
+  const sub=el('div','a in',world,`left:140px;top:${B+148+100*1.2+144}px;font:600 25px 'Inter';letter-spacing:.16em;color:#8C9AA8;white-space:nowrap;z-index:33`,'WHY DOES READING MORE COST LESS?');
+  U.push(t=>{const u=oC(P(t,EV.sub,.45));sub.style.opacity=u;sub.style.transform=`translateX(${(1-u)*-30}px)`;});
+  hairline(140,B+148+100*1.2+204,540,EV.sub+.06);
+  note(140,B+148+100*1.2+234,'552B 参数 MoE · 100 万 token 上下文 · 原生多模态',EV.sub+.14,720);
+  ['1M 上下文','原生读图','MIT 开源'].forEach((c,i)=>chip(140+i*216,B+148+100*1.2+296,c,EV.chips[i]));
+  const fn=el('div','a zh',world,`left:140px;top:${B+880}px;font:500 21px/1 'Alibaba PuHuiTi';color:#A6B4BF;white-space:nowrap;z-index:33`,'* 全文数字取自 DeepSeek 官方发布页与技术报告');
+  U.push(t=>{fn.style.opacity=.92*oC(P(t,EV.note,.5));});
+  // second beat: sharpen the question before the first turn
+  {
+    const qy=B+700;
+    const l1=el('div','a zh',world,`left:140px;top:${qy}px;font:500 27px/1.6 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'上下文越长，缓存越大、显存越贵——');
+    const l2=el('div','a zh',world,`left:140px;top:${qy+46}px;font:900 40px/1.35 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:33`,'这一代，账是<span style="color:#FF5A36">反着算</span>的。');
+    const ar=el('div','a',world,`left:${140+330}px;top:${qy+4}px;width:${560}px;height:2px;background:#25313D;transform-origin:0 50%;opacity:.35;z-index:32`);
+    U.push(t=>{const u=oC(P(t,EV.q2,.55));l1.style.opacity=u*.95;l1.style.transform=`translateX(${(1-u)*-18}px)`;
+      ar.style.transform=`scaleX(${oQ(P(t,EV.q2,.6))})`;
+      const v=oX(P(t,EV.q2+.55,.55));l2.style.opacity=clamp(P(t,EV.q2+.5,.18));l2.style.transform=`translateY(${(1-v)*22}px)`;});
+  }
+  // sticker
+  const st=el('div','a',world,`left:1210px;top:${B+110}px;width:580px;height:660px;z-index:35;transform-origin:50% 60%`);
+  st.innerHTML=`<svg width="580" height="660" style="overflow:visible">
+    <g stroke="#F7F9FB" stroke-width="15" stroke-linejoin="round" paint-order="stroke">
+      <rect x="96" y="150" width="326" height="420" rx="12" fill="#D8E1E8" transform="rotate(8 259 360)"/>
+      <rect x="108" y="128" width="326" height="420" rx="12" fill="#EAEFF3" transform="rotate(-4 271 338)"/>
+      <rect x="120" y="106" width="326" height="420" rx="12" fill="#F7F9FB"/></g>
+    <g fill="none" stroke="#B9C6D1" stroke-width="5" stroke-linecap="round">
+      <path d="M152 194 H358 M152 222 H326 M152 250 H358 M152 278 H308 M152 306 H358 M152 334 H336 M152 362 H296"/>
+      <path d="M152 418 H358 M152 446 H294 M152 474 H358 M152 502 H318"/></g>
+    <rect x="120" y="106" width="326" height="54" rx="12" fill="#25313D"/>
+    <text x="140" y="141" fill="#F7F9FB" font-family="JetBrains Mono" font-weight="700" font-size="18" letter-spacing="1.4">CONTEXT · 1,000,000</text>
+    <rect x="120" y="264" width="326" height="6" fill="#FF5A36" opacity=".85"/>
+    <g transform="translate(402 458) rotate(-9)">
+      <rect x="-92" y="-42" width="184" height="84" rx="10" fill="#FF5A36"/>
+      <text x="0" y="-4" text-anchor="middle" fill="#fff" font-family="Inter" font-weight="900" font-size="26" letter-spacing="1">1M TOKEN</text>
+      <text x="0" y="26" text-anchor="middle" fill="#FFD8CE" font-family="JetBrains Mono" font-weight="700" font-size="15" letter-spacing="1.6">ONE PASS</text></g>
+  </svg>`;
+  U.push(t=>{const s=slap(t,EV.doc_land,.24,.34);st.style.opacity=s.o;
+    const drop=t<EV.doc_land?250*(1-iQ(P(t,0,EV.doc_land))):0;
+    st.style.transform=`translateY(${-drop}px) rotate(${-3+s.r}deg) scale(${s.s})`;
+    st.style.filter=shadow(s.lift*.9);});
+}
+/* ================= B · asymmetric CED ================= */
+{
+  const B=SEC[1];
+  kicker(140,B+96,'01','结构','ASYMMETRIC CED',EV.c1kick);
+  headline(140,B+148,[{t:'输入和输出，'},{t:'不按同一套算。'}],EV.c1head,86,1.2);
+  const specs=[['BACKBONE','552B MoE'],['LAYERS','20 E + 20 D'],['PRETRAIN','45T tokens']];
+  specs.forEach((s,i)=>{const yy=B+124+i*48;
+    const l=el('div','a mo',world,`left:1330px;top:${yy}px;font:600 15px 'JetBrains Mono';letter-spacing:.2em;color:#8C9AA8;white-space:nowrap;z-index:33`,s[0]);
+    const v=el('div','a in',world,`left:1552px;top:${yy-9}px;font:800 27px 'Inter';color:#25313D;white-space:nowrap;z-index:33`,s[1]);
+    U.push(t=>{const u=oC(P(t,EV.c1head+i*.07,.45));l.style.opacity=u;v.style.opacity=u;v.style.transform=`translateX(${(1-u)*16}px)`;});});
+  const BY=B+400, BH=286, BW=452, BL=140, BR=752, cy=BY+BH/2;
+  const dsvg=sv('svg',{width:1920,height:5900,style:'position:absolute;left:0;top:0;z-index:30;overflow:visible'},world);
+  const gD=sv('g',{},dsvg);
+  [[BL,0],[BR,1]].forEach(([bx,i])=>{
+    const g=sv('g',{},gD);
+    sv('rect',{x:bx,y:BY,width:BW,height:BH,rx:13,fill:'#F7F9FB',stroke:'#CFD9E1','stroke-width':3},g);
+    sv('rect',{x:bx,y:BY,width:BW,height:44,rx:13,fill:'#25313D'},g);
+    sv('rect',{x:bx,y:BY+30,width:BW,height:14,fill:'#25313D'},g);
+    sv('text',{x:bx+20,y:BY+30,fill:'#F7F9FB','font-family':'Alibaba PuHuiTi','font-weight':700,'font-size':20},g).textContent=i?'解码器 DECODER':'编码器 ENCODER';
+    sv('text',{x:bx+BW-20,y:BY+30,fill:'#8C9AA8','text-anchor':'end','font-family':'JetBrains Mono','font-weight':700,'font-size':14,'letter-spacing':1.6},g).textContent='20 层';
+    for(let k=0;k<18;k++){const ly=BY+62+k*11.4;sv('rect',{x:bx+24,y:ly,width:BW-48,height:4.2,rx:2,fill:k%6===0?'#8C9AA8':'#D5DEE6'},g);}
+    sv('text',{x:bx+20,y:BY+BH-15,fill:'#8C9AA8','font-family':'JetBrains Mono','font-weight':700,'font-size':13,'letter-spacing':1.8},g).textContent=i?'DECODE':'PREFILL';
+    // each box is pasted on: rise + settle, so the section opens with two slaps
+    U.push(t=>{const s=slap(t,EV.c1head+.18+i*.16,.22,.26);
+      g.setAttribute('opacity',s.o);
+      g.setAttribute('transform',`translate(0 ${((1-s.o)*70).toFixed(1)})`);
+      g.style.transformOrigin=`${bx+BW/2}px ${BY+BH/2}px`;});});
+  const lk=sv('path',{d:`M${BL+BW} ${cy-46} C${BL+BW+68} ${cy-46} ${BR-68} ${cy-46} ${BR} ${cy-46}`,fill:'none',stroke:'#FF5A36','stroke-width':6,'stroke-dasharray':'1 1',pathLength:1,'stroke-linecap':'round'},gD);
+  const lklab=sv('text',{x:BL+BW+16,y:cy-58,fill:'#FF5A36','font-family':'Alibaba PuHuiTi','font-weight':700,'font-size':19},gD);
+  lklab.textContent='全局 KV';
+  sv('path',{d:`M${BL+BW+10} ${cy+40} H${BR-14}`,fill:'none',stroke:'#25313D','stroke-width':3.5,'stroke-dasharray':'13 11'},gD);
+  sv('path',{d:`M${BR} ${cy+40} l-18 -12 l0 24 Z`,fill:'#25313D'},gD);
+  const tlab=sv('text',{x:BL+BW+14,y:cy+78,fill:'#8C9AA8','font-family':'JetBrains Mono','font-weight':700,'font-size':13,'letter-spacing':1.6},gD);
+  tlab.textContent='TOKEN →';
+  const tin=[],tout=[];
+  const gTok=sv('g',{},gD);
+  for(let i=0;i<4;i++)tin.push(sv('rect',{x:0,y:0,width:26,height:16,rx:5,fill:'#8C9AA8',opacity:0},gTok));
+  for(let i=0;i<4;i++)tout.push(sv('rect',{x:0,y:0,width:26,height:16,rx:5,fill:'#FF5A36',opacity:0},gTok));
+  const mkBadge=(x,y,big,sub,hi)=>{const g=sv('g',{},gD);
+    sv('rect',{x,y,width:58,height:58,rx:10,fill:hi?'#FF5A36':'#25313D'},g);
+    sv('text',{x:x+29,y:y+40,fill:'#fff','text-anchor':'middle','font-family':'Inter','font-weight':800,'font-size':27},g).textContent=big;
+    const a1=sv('text',{x:x+74,y:y+25,fill:'#25313D','font-family':'Alibaba PuHuiTi','font-weight':900,'font-size':23},g);a1.textContent=sub[0];
+    const a2=sv('text',{x:x+74,y:y+50,fill:'#8C9AA8','font-family':'Alibaba PuHuiTi','font-weight':500,'font-size':18},g);a2.textContent=sub[1];
+    g.setAttribute('opacity',0);return g;};
+  const b8=mkBadge(BL,BY+BH+46,'8B',['输入激活','每 token，预填充'],true);
+  const b16=mkBadge(BR,BY+BH+46,'16B',['输出激活','每 token，解码'],false);
+  // callout card
+  const co=el('div','a card',world,`left:1330px;top:${BY}px;width:450px;height:286px;z-index:33;transform-origin:50% 50%`);
+  co.innerHTML=`<div class="a zh" style="position:absolute;left:24px;top:22px;font:700 21px/1 'Alibaba PuHuiTi';color:#5E6D7B">为什么能不对称</div>
+   <div style="position:absolute;left:24px;top:58px;width:402px;height:2px;background:#DCE4EA"></div>
+   <div class="a zh" style="position:absolute;left:24px;top:76px;width:402px;font:500 19px/1.6 'Alibaba PuHuiTi';color:#25313D">解码器的全局 KV 直接由编码器末层投影而来，不必每层各存一份。</div>
+   <div class="a zh" style="position:absolute;left:24px;top:148px;width:402px;font:500 19px/1.6 'Alibaba PuHuiTi';color:#25313D">于是读得越多，<span style="color:#FF5A36;font-weight:700">每 token 摊到的成本越低。</span></div>
+   <div class="a in" style="position:absolute;left:24px;top:224px;font:900 38px/1 Inter;letter-spacing:-.02em;color:#25313D">8<span style="color:#8C9AA8;font-size:24px;font-weight:700"> / </span>16<span style="font:700 19px 'Inter';color:#8C9AA8;margin-left:8px">B / token</span></div>`;
+  U.push(t=>{const s=slap(t,EV.card[0],.2,.3);co.style.opacity=s.o;co.style.transform=`rotate(${s.r*.5}deg) scale(${s.s})`;co.style.filter=shadow(s.lift*.7);});
+  U.push(t=>{
+    const u1=clamp((t-EV.slash-.35)/.55);
+    // token lanes: gray stream under the encoder (input), orange under the decoder (output)
+    const lane=(arr,x0,x1,w,seed)=>{const n=arr.length,span=x1-x0;
+      arr.forEach((r,i)=>{const ph=((t*.5+seed+i/n)%1);const x=x0+ph*span;
+        r.setAttribute('x',x-(w/2));r.setAttribute('y',BY+BH+12);
+        r.setAttribute('opacity',u1*clamp(Math.sin(Math.PI*ph)*2.6)*clamp((x1-x)/26)*clamp((x-x0+26)/26));});};
+    lane(tin,BL-18,BL+BW-24,16,.0);
+    lane(tout,BR-18,BR+BW-24,16,.45);    const kvu=ioC(P(t,EV.slash,.7));lk.setAttribute('stroke-dashoffset',1-kvu);
+    lklab.setAttribute('opacity',clamp((kvu-.35)*2.6));
+    b8.setAttribute('opacity',oC(P(t,EV.prefill,.4)));
+    b16.setAttribute('opacity',oC(P(t,EV.decode,.4)));
+  });
+  noteHi(140,B+900,'CED（因果编码器-解码器）：输入激活 8B、输出激活 16B，这一层不对称正是长输入场景便宜的原因。','这一层不对称',EV.note1,1600,1.9);
+  // second beat: 20 per-layer copies collapse into one shared copy
+  {
+    const gx=1330, gy=B+742;
+    const ttl=el('div','a zh',world,`left:${gx}px;top:${gy-34}px;font:700 20px/1 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'每层各存一份 → 全体共用一份');
+    U.push(t=>{ttl.style.opacity=oC(P(t,EV.bstack-.1,.4));});
+    const bars=[];
+    for(let k=0;k<20;k++){
+      const b=el('div','a',world,`left:${gx}px;top:${gy+k*7}px;width:236px;height:4px;border-radius:2px;background:#BCC8D3;transform-origin:0 50%;z-index:31`);
+      bars.push(b);
+    }
+    const one=el('div','a',world,`left:${gx+330}px;top:${gy-4}px;width:26px;height:145px;border-radius:3px;background:#FF5A36;transform-origin:50% 100%;z-index:31`);
+    const oneL=el('div','a zh',world,`left:${gx+372}px;top:${gy+50}px;font:900 27px/1.15 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:33`,'1 份<span style="font:600 14px \'JetBrains Mono\';color:#8C9AA8;letter-spacing:.14em;margin-left:10px">SHARED</span>');
+    U.push(t=>{
+      const u=oC(P(t,EV.bstack,.5));
+      const q=clamp((t-EV.bstack-.35)/.75);
+      bars.forEach((b,k)=>{
+        b.style.opacity=u*.95*(1-clamp((q-.8)*5));
+        b.style.left=(lerp(gx,gx+330,q)).toFixed(1)+'px';
+        b.style.top=(gy+k*7).toFixed(1)+'px';
+        b.style.width=(lerp(236,26,q)).toFixed(1)+'px';});
+      const s=slap(t,EV.bstack+1.05,.2,.34);one.style.opacity=s.o;one.style.transform=`scale(${s.s})`;
+      oneL.style.opacity=clamp(s.o*1.2);});
+  }
+}
+/* ================= C · kv cache ================= */
+{
+  const B=SEC[2];
+  kicker(140,B+96,'02','缓存','KV CACHE',EV.c2kick);
+  headline(140,B+148,[{t:'同一条上下文，'},{t:'只存四分之一。'}],EV.c2head,82,1.19);
+  // big number block (left)
+  const nBig=el('div','a in',world,`left:126px;top:${B+360}px;font:900 226px/1 'Inter';letter-spacing:-.05em;color:#8C9AA8;white-space:nowrap;z-index:33`,'0');
+  const unit=el('div','a zh',world,`left:${126+430+26}px;top:${B+430}px;font:900 54px/1 'Alibaba PuHuiTi';color:#FF5A36;white-space:nowrap;z-index:33`,'字节');
+  const unit2=el('div','a mo',world,`left:${126+430+28}px;top:${B+504}px;font:600 18px 'JetBrains Mono';letter-spacing:.16em;color:#8C9AA8;white-space:nowrap;z-index:33`,'PER TOKEN');
+  const unit3=el('div','a zh',world,`left:${126+430+28}px;top:${B+536}px;font:700 20px/1.5 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:33`,'HBM 内全局 KV<br>每 token 占用');
+  const capTxt=el('div','a zh',world,`left:130px;top:${B+614}px;font:500 22px/1.5 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'上一代同口径约 3.5 KB，再往前一代还要再翻几十倍');
+  U.push(t=>{const u=oC(P(t,EV.n890,.95));nBig.textContent=String(Math.round(890*u));
+    const w=wob(t-EV.n890-.95,4,8);nBig.style.transform=`scale(${(1+.045*w).toFixed(4)})`;nBig.style.transformOrigin='0 74%';
+    nBig.style.color=u>=.999?'#25313D':'#8C9AA8';
+    [unit,unit2,unit3].forEach((e,i)=>{const s=oC(P(t,EV.n890+.42+i*.06,.4));e.style.opacity=s;e.style.transform=`translateY(${(1-s)*12}px)`;});
+    const cs=oC(P(t,EV.n890+.8,.5));capTxt.style.opacity=cs*.95;});
+  // ratio bars (right)
+  const BX=1000, BW=400, BH=30;
+  const rows=[{y:B+372,lab:'HBM 内的全局 KV',ratio:.25,tag:'× 1/4',sub:'每 token 890 B',land:EV.bar0},
+              {y:B+500,lab:'常驻 KV（SSD / 主机内存）',ratio:.125,tag:'× 1/8',sub:'SWA Bounded Replay',land:EV.bar1}];
+  rows.forEach(r=>{
+    const l=el('div','a zh',world,`left:${BX}px;top:${r.y-38}px;font:700 22px/1 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:33`,r.lab);
+    const prev=el('div','a',world,`left:${BX}px;top:${r.y}px;width:${BW}px;height:${BH}px;border-radius:5px;background:#DCE4EA;box-shadow:inset 0 0 0 2px #C4D0D9;transform-origin:0 50%;z-index:31`);
+    const pv0=el('div','a mo',world,`left:${BX}px;top:${r.y+7}px;width:${BW-14}px;text-align:right;font:600 14px 'JetBrains Mono';letter-spacing:.08em;color:#8C9AA8;z-index:32`,'上一代 = 1×');
+    const cur=el('div','a',world,`left:${BX}px;top:${r.y+40}px;width:${BW*r.ratio}px;height:40px;border-radius:5px;background:#FF5A36;transform-origin:0 50%;z-index:32`);
+    const tag=el('div','a in',world,`left:${BX+BW+28}px;top:${r.y+12}px;font:900 48px/1 'Inter';letter-spacing:-.02em;color:#FF5A36;white-space:nowrap;z-index:33`,'× 1/'+Math.round(1/r.ratio));
+    const sub=el('div','a zh',world,`left:${BX+BW*r.ratio+12}px;top:${r.y+48}px;font:700 18px 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:33`,r.sub);
+    U.push(t=>{const u=oC(P(t,r.land,.55));prev.style.opacity=u*.95;prev.style.transform=`scaleX(${u})`;
+      const s=slap(t,r.land+.45,.18,.3);tag.style.opacity=s.o;tag.style.transform=`scale(${s.s})`;tag.style.transformOrigin='0 50%';
+      cur.style.opacity=clamp((u-.5)*3);cur.style.transform=`scaleX(${clamp((u-.5)*2)})`;
+      pv0.style.opacity=clamp((u-.3)*3)*.9;
+      sub.style.opacity=clamp((u-.62)*4);l.style.opacity=u;});
+  });
+  // second beat: turn the per-token number into something you can hold in your head
+  {
+    const ax=1000, ay=B+606;
+    const lab=el('div','a mo',world,`left:${ax}px;top:${ay+8}px;font:600 15px 'JetBrains Mono';letter-spacing:.16em;color:#8C9AA8;white-space:nowrap;z-index:33`,'890 B × 1M =');
+    const val=el('div','a in',world,`left:${ax+152}px;top:${ay-16}px;font:900 46px/1 'Inter';letter-spacing:-.03em;color:#25313D;white-space:nowrap;z-index:33`,'890 MB');
+    const tail=el('div','a zh',world,`left:${ax+340}px;top:${ay-6}px;font:500 20px/1.5 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'一条 100 万 token 上下文的全部 KV<br>80 GB 的卡能同时挂 <span style="color:#FF5A36;font-weight:900;font-size:26px">90</span> 条');
+    U.push(t=>{const u=oC(P(t,EV.cstack-.1,.5));lab.style.opacity=u;
+      const s=slap(t,EV.cstack+.16,.2,.34);val.style.opacity=s.o;val.style.transform=`scale(${s.s})`;val.style.transformOrigin='0 50%';
+      const v=oC(P(t,EV.cstack+.5,.5));tail.style.opacity=v;tail.style.transform=`translateX(${(1-v)*14}px)`;});
+  }
+  // 437 block + technique chips
+  const big=el('div','a',world,`left:140px;top:${B+700}px;width:820px;z-index:33`);
+  big.innerHTML=`<div class="a in" style="position:absolute;left:0;top:-8px;font:900 84px/1 Inter;letter-spacing:-.045em;color:#25313D">437<span style="color:#FF5A36">×</span></div>
+    <div class="a zh" style="position:absolute;left:224px;top:2px;font:700 22px/1.5 'Alibaba PuHuiTi';color:#5E6D7B">较初代模型，KV 缓存<br>累计缩小 437 倍</div>`;
+  U.push(t=>{const u=oC(P(t,EV.n437,.7));big.style.opacity=u;big.style.transform=`translateY(${(1-u)*20}px)`;});
+  // 'why a quarter' explainer: three techniques fold into one saving
+  {
+    const sx=1000, sy=B+740;
+    const kk=el('div','a zh',world,`left:${sx}px;top:${sy-46}px;font:700 21px/1 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'四分之一是怎么来的');
+    U.push(t=>{kk.style.opacity=oC(P(t,EV.c2tech[0]-.2,.45));});
+    const rows=[['CSA2 · 三种层模式','Full / Reindex / Reuse'],['跨层 KV 复用','一份投影，全体共用'],['FP4 KV 缓存','更低的位宽，存同样的内容']];
+    rows.forEach((r,i)=>{
+      const y=sy+i*50;
+      const a1=el('div','a zh',world,`left:${sx}px;top:${y}px;font:700 21px/1 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:33`,r[0]);
+      const a2=el('div','a zh',world,`left:${sx+266}px;top:${y+2}px;font:500 19px/1 'Alibaba PuHuiTi';color:#8C9AA8;white-space:nowrap;z-index:33`,r[1]);
+      U.push(t=>{const u=oC(P(t,EV.c2tech[i]-.06,.45));a1.style.opacity=u;a2.style.opacity=u;a2.style.transform=`translateX(${(1-u)*14}px)`;});
+    });
+  }
+  noteHi(140,B+898,'Agent 场景里缓存命中占成本大头：缓存压到 1/4–1/8，同样的显存就能装下更多会话。','缓存命中占成本大头',EV.note2,1660,2.0);
+}
+/* ================= D · benchmarks ================= */
+{
+  const B=SEC[3];
+  kicker(140,B+96,'03','跑分','BENCHMARKS',EV.c3kick);
+  headline(140,B+148,[{t:'小模型，'},{t:'赢了自己的旗舰。'}],EV.c3head,82,1.19);
+  const lg=el('div','a',world,`left:1120px;top:${B+158}px;display:flex;gap:24px;align-items:center;z-index:33`);
+  lg.innerHTML=`<span style="display:flex;align-items:center;gap:8px;font:600 15px 'JetBrains Mono';letter-spacing:.06em;color:#8C9AA8"><i style="width:15px;height:15px;background:#D3DCE3;border-radius:3px;display:block"></i>V4.1</span>
+    <span style="display:flex;align-items:center;gap:8px;font:600 15px 'JetBrains Mono';letter-spacing:.06em;color:#25313D"><i style="width:15px;height:15px;background:#FF5A36;border-radius:3px;display:block"></i>1017</span>
+    <span style="display:flex;align-items:center;gap:8px;font:600 15px 'JetBrains Mono';letter-spacing:.06em;color:#5E6D7B"><i style="width:2px;height:18px;background:#25313D;display:block"></i>OPUS 5</span>`;
+  U.push(t=>{lg.style.opacity=oC(P(t,EV.c3sub,.5));});
+  const ROWS=[
+    {name:'Terminal-Bench 4.0',prev:31.2,cur:42.3,ref:51.8},
+    {name:'HLE（不用工具）',prev:36.8,cur:42.6,ref:56.3},
+    {name:'DeepSWE v1.1',prev:74.2,cur:77.0,ref:74.0},
+    {name:'Automation-Bench',prev:54.8,cur:60.5,ref:50.3},
+    {name:'Apex Bench v1.1',prev:64.6,cur:72.1,ref:65.8}];
+  const LX=140,BX=580,BW=790,MAX=100,rowH=98;
+  ROWS.forEach((r,i)=>{
+    const ry=B+356+i*rowH;
+    const nm=el('div','a zh',world,`left:${LX}px;top:${ry+6}px;font:700 24px/1 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;z-index:33`,r.name);
+    const pv=el('div','a',world,`left:${BX}px;top:${ry}px;width:${BW*r.prev/MAX}px;height:21px;border-radius:4px;background:#D3DCE3;transform-origin:0 50%;z-index:31`);
+    const cu=el('div','a',world,`left:${BX}px;top:${ry+28}px;width:${BW*r.cur/MAX}px;height:21px;border-radius:4px;background:#FF5A36;transform-origin:0 50%;z-index:32`);
+    const cv=el('div','a in',world,`left:${BX+BW*r.cur/MAX+14}px;top:${ry+22}px;font:800 26px/1 'Inter';color:#25313D;white-space:nowrap;z-index:33`,r.cur.toFixed(1));
+    const rf=el('div','a',world,`left:${BX+BW*r.ref/MAX}px;top:${ry-8}px;width:2px;height:68px;background:#25313D;opacity:0;z-index:33`);
+    const rfl=el('div','a mo',world,`left:${BX+BW*r.ref/MAX+8}px;top:${ry-26}px;font:600 13px 'JetBrains Mono';color:#5E6D7B;white-space:nowrap;z-index:33`,r.ref.toFixed(1));
+    const land=EV.rows[i];
+    U.push(t=>{const u=oC(P(t,land,.58)),u2=oC(P(t,land+.1,.6));
+      nm.style.opacity=clamp(u*2.2);nm.style.transform=`translateX(${(1-u)*-16}px)`;
+      pv.style.opacity=u*.95;pv.style.transform=`scaleX(${u})`;
+      cu.style.opacity=clamp((u2-.35)*1.8);cu.style.transform=`scaleX(${u2})`;
+      const c2=clamp((u2-.55)*3.2);cv.style.opacity=c2;cv.style.transform=`translateX(${(1-c2)*12}px)`;
+      rf.style.opacity=clamp((u-.4)*2.2)*.55;rf.style.transform=`scaleY(${clamp((u-.4)*2).toFixed(3)})`;rf.style.transformOrigin='50% 50%';
+      rfl.style.opacity=clamp((u-.6)*2.5)*.9;});
+  });
+  const st=el('div','a',world,`left:1560px;top:${B+132}px;width:240px;height:124px;z-index:36;transform-origin:50% 50%`);
+  st.innerHTML=`<div style="position:absolute;inset:0;border:5px solid #FF5A36;border-radius:10px;transform:rotate(-11deg)"></div>
+    <div style="position:absolute;inset:10px;border:2px solid #FF5A36;border-radius:6px;transform:rotate(-11deg)"></div>
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(-11deg)">
+      <div class="in" style="font:900 52px/1 Inter;letter-spacing:.02em;color:#FF5A36">1017</div>
+      <div class="zh" style="font:700 17px/1 'Alibaba PuHuiTi';letter-spacing:.16em;color:#FF5A36;margin-top:8px">五项全涨</div></div>`;
+  U.push(t=>{const s=slap(t,EV.stamp,.22,.5);st.style.opacity=s.o*.95;st.style.transform=`rotate(${s.r*1.2}deg) scale(${s.s})`;});
+  // second beat: the five deltas roll up into one number
+  {
+    const sx0=1330, sy=B+470;
+    const l=el('div','a zh',world,`left:${sx0}px;top:${sy}px;font:700 22px/1 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'五项平均');
+    const v=el('div','a in',world,`left:${sx0-6}px;top:${sy+34}px;font:900 96px/1 'Inter';letter-spacing:-.045em;color:#FF5A36;white-space:nowrap;z-index:33`,'+6.6');
+    const u2=el('div','a zh',world,`left:${sx0}px;top:${sy+152}px;font:500 21px/1.6 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'分，五个基准全部上涨；<br>其中三项直接高于 Opus 5。<br><span style="color:#8C9AA8;font-size:17px">DeepSWE 77.0 / 74.0 · Automation 60.5 / 50.3<br>Apex 72.1 / 65.8（左为 1017，右为 Opus 5）</span>');
+    U.push(t=>{const u=oC(P(t,EV.dsum-.1,.5));l.style.opacity=u;
+      const s=slap(t,EV.dsum+.1,.22,.36);v.style.opacity=s.o;v.style.transform=`scale(${s.s})`;v.style.transformOrigin='0 80%';
+      const w=oC(P(t,EV.dsum+.5,.5));u2.style.opacity=w;u2.style.transform=`translateY(${(1-w)*12}px)`;});
+  }
+  noteHi(140,B+906,'数据取自官方技术报告：灰条为 09-10 版本，橙条为 10-17 版本；竖线为 Opus 5 同项成绩。','灰条为 09-10 版本',EV.note3,1600,2.3);
+}
+/* ================= E · multimodal + pricing ================= */
+{
+  const B=SEC[4];
+  kicker(140,B+96,'04','成本','MULTIMODAL · PRICING',EV.c4kick);
+  headline(140,B+148,[{t:'能看图，'},{t:'也便宜到可以随手用。'}],EV.c4head,80,1.19);
+  // price table (left column)
+  const PX=140, PY=B+408;
+  const hdr=el('div','a zh',world,`left:${PX}px;top:${PY-46}px;width:900px;font:700 22px/1 'Alibaba PuHuiTi';color:#25313D;z-index:33`,
+    `<span style="display:inline-block;width:15px;height:15px;background:#FF5A36;margin-right:12px;vertical-align:-1px"></span>API 价格 · 每百万 token<span style="font:600 15px 'JetBrains Mono';letter-spacing:.18em;color:#8C9AA8;margin-left:14px">deepseek-flash</span>`);
+  U.push(t=>{hdr.style.opacity=oC(P(t,EV.price[0]-.12,.4));});
+  const hl=el('div','a',world,`left:${PX}px;top:${PY}px;width:820px;height:3px;background:#25313D;transform-origin:0 50%;z-index:33`);
+  U.push(t=>{hl.style.transform=`scaleX(${oQ(P(t,EV.price[0],.6))})`;});
+  const h1=el('div','a mo',world,`left:${PX+520}px;top:${PY-26}px;font:600 13px 'JetBrains Mono';letter-spacing:.14em;color:#8C9AA8;white-space:nowrap;z-index:33`,'闲时');
+  const h2=el('div','a mo',world,`left:${PX+692}px;top:${PY-26}px;font:600 13px 'JetBrains Mono';letter-spacing:.14em;color:#8C9AA8;white-space:nowrap;z-index:33`,'高峰');
+  U.push(t=>{const u=oC(P(t,EV.price[0]+.1,.4));h1.style.opacity=u;h2.style.opacity=u;});
+  const PR=[['缓存命中','$0.003','$0.006',true],['缓存未命中','$0.15','$0.30',false],['输出','$0.60','$1.20',false]];
+  PR.forEach((p,i)=>{
+    const ry=PY+20+i*88;
+    const row=el('div','a',world,`left:${PX}px;top:${ry}px;width:820px;height:82px;z-index:33`);
+    row.innerHTML=`<div class="a zh" style="position:absolute;left:0;top:26px;font:700 26px/1 'Alibaba PuHuiTi';color:#25313D">${p[0]}</div>
+      <div class="a in" style="position:absolute;left:492px;top:12px;font:900 42px/1 Inter;letter-spacing:-.02em;color:${p[3]?'#FF5A36':'#25313D'}">${p[1]}</div>
+      <div class="a in" style="position:absolute;left:676px;top:20px;font:800 32px/1 Inter;letter-spacing:-.02em;color:#8C9AA8">${p[2]}</div>
+      <div style="position:absolute;left:0;top:80px;width:820px;height:2px;background:#DCE4EA"></div>`;
+    const land=EV.price[i];
+    U.push(t=>{const u=oC(P(t,land,.5));row.style.opacity=u;row.style.transform=`translateY(${(1-u)*16}px)`;});
+  });
+  const tk=el('div','a',world,`left:116px;top:${PY+300}px;width:300px;height:140px;z-index:36;transform-origin:50% 50%`);
+  tk.innerHTML=`<div style="position:absolute;inset:0;background:#25313D;border-radius:11px"></div>
+    <svg width="300" height="140" style="position:absolute;left:0;top:0;overflow:visible">
+      <g fill="#FF5A36"><circle cx="0" cy="70" r="10"/><circle cx="300" cy="70" r="10"/></g>
+      <g stroke="#5E6D7B" stroke-width="2" stroke-dasharray="5 7"><path d="M256 12 V128"/></g>
+      <g font-family="Alibaba PuHuiTi" font-weight="900" fill="#F7F9FB"><text x="22" y="52" font-size="28">闲时五折</text>
+        <text x="22" y="86" font-size="15" fill="#93A1AE" font-weight="500">工作日 01–04 · 06–10 UTC 为高峰</text>
+        <text x="22" y="110" font-size="15" fill="#93A1AE" font-weight="500">其余时段与周末按闲时计</text></g>
+      <g transform="translate(278 70) rotate(-90)"><text text-anchor="middle" fill="#FF5A36" font-family="JetBrains Mono" font-weight="700" font-size="13" letter-spacing="3">50% OFF</text></g></svg>`;
+  U.push(t=>{const s=slap(t,EV.half,.22,.42);tk.style.opacity=s.o;tk.style.transform=`rotate(${-4+s.r}deg) scale(${s.s})`;tk.style.filter=shadow(s.lift*.8);});
+  const tkNote=el('div','a zh',world,`left:478px;top:${PY+300}px;font:500 21px/1.7 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:33`,'价格在 2026-09-10 下调；<br>闲时价为高峰价的一半。');
+  U.push(t=>{const u=oC(P(t,EV.half+.15,.5));const o=1-oC(P(t,EV.esplit-.2,.35));tkNote.style.opacity=.95*u*o;tkNote.style.transform=`translateY(${(1-u)*10}px)`;});
+  // second beat: put the price spread into one sentence you can act on
+  const tkNote2=el('div','a zh',world,`left:478px;top:${PY+296}px;font:500 21px/1.7 'Alibaba PuHuiTi';color:#5E6D7B;white-space:nowrap;z-index:34`,'缓存命中比未命中便宜 <span style="color:#FF5A36;font-weight:900;font-size:28px">50</span> 倍；<br>十亿 token 的输入，$3 对 $150。');
+  U.push(t=>{const u=oC(P(t,EV.esplit,.5));tkNote2.style.opacity=u;tkNote2.style.transform=`translateY(${(1-u)*14}px)`;});
+  const tkEdge=el('div','a',world,`left:456px;top:${PY+310}px;width:3px;height:92px;background:#FF5A36;transform-origin:50% 0;z-index:33`);
+  U.push(t=>{tkEdge.style.transform=`scaleY(${oQ(P(t,EV.esplit,.5))})`;});
+  // cards (right column, stacked)
+  const CARDS=[
+    {t:'原生读图',big:'92.5',unit:'BabyVision',sub:'Chartography 83.0 · 官方多模态基准'},
+    {t:'长上下文',big:'1M',unit:'tokens',sub:'最长输出 384K · 一次读完整座代码库'},
+    {t:'许可',big:'MIT',unit:'开源',sub:'权重与技术报告已在 Hugging Face 发布'}];
+  const CW=760, CH=142, CX0=1000, CY=B+372;
+  CARDS.forEach((c,i)=>{
+    const cy=CY+i*(CH+16);
+    const card=el('div','a card',world,`left:${CX0}px;top:${cy}px;width:${CW}px;height:${CH}px;z-index:32;transform-origin:50% 60%`);
+    card.innerHTML=`<div class="a zh" style="position:absolute;left:26px;top:26px;font:700 22px/1 'Alibaba PuHuiTi';color:#5E6D7B">${c.t}</div>
+      <div class="a in" style="position:absolute;left:24px;top:58px;font:900 62px/1 Inter;letter-spacing:-.035em;color:#25313D">${c.big}<span style="font:800 20px Inter;letter-spacing:0;margin-left:10px;color:#FF5A36">${c.unit}</span></div>
+      <div class="a zh" style="position:absolute;left:330px;top:56px;width:400px;font:500 19px/1.5 'Alibaba PuHuiTi';color:#5E6D7B">${c.sub}</div>`;
+    U.push(t=>{const s=slap(t,EV.cards[i],.2,.28);card.style.opacity=s.o;card.style.transform=`translateX(${(1-s.o)*30}px) rotate(${s.r*.4}deg) scale(${s.s})`;card.style.filter=shadow(s.lift*.6);});
+  });
+  noteHi(140,B+900,'原生多模态：图片与文本一起进、仍输出文本；旧名 deepseek-v4-flash 会自动路由到新模型，V4 Pro 也将有序下线。','deepseek-v4-flash',EV.note4,1640,1.9);
+}
+/* ---------------- HUD ---------------- */
+const CHT=cues.chapters.concat([cues.duration]), CHP=cues.chapter_names;
+const hLogo=el('div','a zh',hud,`left:96px;top:1002px;font:900 22px/1 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap;letter-spacing:.05em`,
+ `<span style="display:inline-block;width:14px;height:14px;background:#FF5A36;margin-right:11px;vertical-align:0"></span>硬核拆解<span style="font:700 14px 'JetBrains Mono';letter-spacing:.2em;margin-left:11px;opacity:.55">NO.001</span>`);
+const RX=1104,RW=720,SGW=(RW-4*9)/5;
+const hCh=CHP.slice(1).map((c,i)=>{
+  const e=el('div','a zh',hud,`left:${RX+i*(SGW+9)}px;top:999px;width:${SGW}px;font:700 17px/1 'Alibaba PuHuiTi';color:#25313D;white-space:nowrap`,
+   `<span style="font:700 13px 'JetBrains Mono';margin-right:7px;letter-spacing:.06em">0${i+1}</span>${c}`);
+  const tr=el('div','a',hud,`left:${RX+i*(SGW+9)}px;top:1028px;width:${SGW}px;height:4px;border-radius:2px;background:rgba(37,49,61,.14);overflow:hidden`);
+  const f=el('div','a',tr,`left:0;top:0;width:${SGW}px;height:4px;background:#FF5A36;transform-origin:0 50%`);return{e,tr,f};});
+const hClock=el('div','a mo',hud,`left:1740px;top:64px;font:600 15px 'JetBrains Mono';letter-spacing:.12em;color:#96A5B2;white-space:nowrap`,'00.0s');
+const hubY=t=>{const C=cam(t);let d=1e9;for(const s of [540,1620,2700,3780,4860])d=Math.min(d,Math.abs(C.y-s));return d;};
+U.push(t=>{const fade=(1-oC(P(t,EV.dark-.4,.3)))*oC(P(t,.3,.5))*(1-clamp((hubY(t)-70)/190));
+  hLogo.style.opacity=fade;
+  hCh.forEach((h,i)=>{const on=t>=CHT[i+1]&&t<CHT[i+2];h.e.style.opacity=(on?1:.34)*fade;h.tr.style.opacity=fade;
+   h.f.style.transform=`scaleX(${clamp((t-CHT[i+1])/(CHT[i+2]-CHT[i+1])).toFixed(4)})`;});
+  hClock.textContent=(t<10?'0':'')+t.toFixed(1)+'s';hClock.style.opacity=fade*.85;});
+/* ---------------- END CARD ---------------- */
+const EX=700, EB=618;
+const endBg=el('div','a',endL,'position:absolute;left:0;top:0;width:1920px;height:1080px;background:#10161C;transform-origin:50% 100%');
+const eGrid=el('div','a',endL,'position:absolute;inset:0;opacity:0;background-image:radial-gradient(circle,#7E93A6 2px,transparent 2.6px);background-size:46px 46px');
+const eEdge=el('div','a',endL,'position:absolute;inset:52px;opacity:0;box-shadow:inset 0 0 0 1px rgba(233,238,242,.10);pointer-events:none');
+const eK=el('div','a zh',endL,`left:${EX}px;top:214px;font:700 25px/1 'Alibaba PuHuiTi';color:#E9EEF2;white-space:nowrap`,
+ `<span style="display:inline-block;width:17px;height:17px;background:#FF5A36;margin-right:13px;vertical-align:-1px"></span>DeepSeek V4.1 Flash<span style="font:600 16px 'JetBrains Mono';letter-spacing:.2em;color:#8C9AA8;margin-left:15px">EXPLAINER · 60S</span>`);
+const eTs=sv('svg',{width:1920,height:1080,style:'position:absolute;left:0;top:0;overflow:visible'},endL);
+const eUnit=sv('text',{x:0,y:0,fill:'#8C9AA8','font-family':'JetBrains Mono','font-weight':700,'font-size':26,'letter-spacing':3.4,opacity:0},eTs);
+eUnit.textContent='BYTES / TOKEN';
+const eUnit2=el('div','a zh',endL,`left:0;top:0;font:700 26px/1.4 'Alibaba PuHuiTi';color:#C9D4DE;white-space:nowrap;opacity:0`,'每 token 的<br>KV 缓存占用');
+const eFl=sv('circle',{r:0,fill:'none',stroke:'#FF5A36','stroke-width':12},eTs);
+const eStk=el('div','a',endL,'transform-origin:0 0');
+const eSv=sv('svg',{width:1,height:1,style:'position:absolute;left:0;top:0;overflow:visible'},eStk);
+const eNum=sv('text',{x:0,y:0,'font-family':'Inter','font-weight':900,'font-size':246,'letter-spacing':42,fill:'#FF5A36',stroke:'#F7F9FB','stroke-width':11,'stroke-linejoin':'round','paint-order':'stroke'},eSv);
+eNum.textContent='890';
+const eH=el('div','a zh',endL,`left:${EX}px;top:${EB+104}px;font:900 56px/1.3 'Alibaba PuHuiTi';color:#F7F9FB;white-space:nowrap`,
+ `同样的上下文，<span style="position:relative;display:inline-block"><i class="emk" style="position:absolute;left:-6px;right:-6px;bottom:4px;height:17px;background:#FF5A36;transform-origin:0 50%;transform:scaleX(0)"></i><span style="position:relative">四分之一</span></span>的内存`);
+const eMk=eH.querySelector('.emk');
+const eC=el('div','a zh',endL,`left:${EX}px;top:${EB+192}px;font:500 23px/1.7 'Alibaba PuHuiTi';color:#9AA8B5;white-space:normal;width:850px`,
+ '输入激活 8B、输出激活 16B；HBM 需求降到上一代的 1/4，常驻缓存降到 1/8——较初代模型，KV 缓存累计缩小 437 倍。');
+const eTag=el('div','a zh',endL,`left:${EX}px;top:${EB+300}px;font:900 31px/1 'Alibaba PuHuiTi';color:#FF5A36;white-space:nowrap`,'更强 · 更快 · 更普惠');
+const eSrc=el('div','a zh',endL,`left:${EX}px;top:980px;font:500 16px/1.5 'Alibaba PuHuiTi';color:#55636F;white-space:normal;width:940px`,
+ '资料来源：DeepSeek 官方发布页（2026-09-10）、DeepSeek-V4.1-Flash 技术报告、Hugging Face 模型卡（-1017 版）、DeepSeek API 定价页');
+const eMaskSvg=sv('svg',{width:1920,height:1080,style:'position:absolute;left:0;top:0;overflow:visible'},endL);
+const eDefs=sv('defs',{},eMaskSvg),eMask=sv('mask',{id:'cmask',maskUnits:'userSpaceOnUse',x:-200,y:-200,width:2320,height:1480},eDefs);
+const eMP=sv('path',{fill:'none',stroke:'#fff','stroke-width':26,'stroke-linecap':'round',pathLength:1,'stroke-dasharray':'1 1'},eMask);
+const eLine=sv('path',{fill:'none',stroke:'#FF5A36','stroke-width':5,'stroke-linecap':'round','stroke-dasharray':'0.1 14',mask:'url(#cmask)'},eMaskSvg);
+const eRing=sv('circle',{r:7,fill:'none',stroke:'#FF5A36','stroke-width':3},eMaskSvg);
+const eDot=sv('circle',{r:8,fill:'#FF5A36',stroke:'#F7F9FB','stroke-width':4},eMaskSvg);
+let eW=0;
+U.push((t)=>{
+  // the dark end sheet slaps down over the paper world (paper-sticker language: a sheet, not a wipe)
+  const pIn=P(t,EV.dark-.18,.62), e=oB(pIn,1.5);
+  const w=wob(t-(EV.dark-.18+.62),4,11);
+  endBg.style.transform=`translateY(${((1-e)*-1120).toFixed(1)}px) rotate(${(-1.6*(1-e)+ .5*w).toFixed(2)}deg) scale(${(1+.012*(1-e)).toFixed(3)})`;
+  endBg.style.opacity=clamp(pIn*4);
+  endBg.style.boxShadow=`0 ${(30*(1-Math.min(1,pIn))).toFixed(0)}px 70px rgba(4,8,12,.6)`;
+  eGrid.style.opacity=.11*oC(P(t,EV.dark+.05,.6));
+  eEdge.style.opacity=.9*oC(P(t,EV.dark+.3,.6));
+  const eS=1+.012*(u=>u*u*(3-u)/2)(P(t,55.0,5.0));
+  endL.style.transformOrigin=`${EX}px ${EB}px`;endL.style.transform=`scale(${eS.toFixed(4)})`;
+  const G=[EX+128,EB-118];
+  if(!eW){eW=eNum.getComputedTextLength();eNum.setAttribute('x',(-eW/2).toFixed(1));
+    eUnit.setAttribute('x',(EX+eW+40).toFixed(1));eUnit.setAttribute('y',(EB-118).toFixed(1));
+    eUnit2.style.left=(EX+eW+38)+'px';eUnit2.style.top=(EB-96)+'px';}
+  const S=[EX-246,900];
+  const q1=[S[0]-6,S[1]-186],q2=[G[0]-232,G[1]+178],mid=[(q1[0]+q2[0])/2-26,(q1[1]+q2[1])/2];
+  const f1=v=>v.toFixed(1);
+  const d=`M${f1(S[0])} ${f1(S[1])} Q${f1(q1[0])} ${f1(q1[1])} ${f1(mid[0])} ${f1(mid[1])} Q${f1(q2[0])} ${f1(q2[1])} ${f1(G[0])} ${f1(G[1])}`;
+  eLine.setAttribute('d',d);eMP.setAttribute('d',d);
+  const Lt=eLine.getTotalLength(),Ld=44,Lv=Math.max(50,Lt-Ld-240),Dp=eLine.getPointAtLength(Ld);
+  eLine.setAttribute('stroke-dasharray',`0.1 ${(Lv/12).toFixed(2)}`);eLine.setAttribute('stroke-dashoffset',(-Ld).toFixed(2));
+  const f0=EV.contrail[0],land=EV.slam,s0=.26,l0=Math.log(s0),l1=Math.log(1.0);
+  const u=P(t,f0,land-f0),ep=eMark(u);
+  if(t<EV.peel){eStk.style.opacity=0;}
+  else{eStk.style.opacity=1;
+   if(t<f0){const p=oC(P(t,EV.peel,f0-EV.peel));
+     eStk.style.transform=`translate(${(S[0]+8*(1-p)).toFixed(1)}px,${(S[1]+54*(1-p)).toFixed(1)}px) rotate(${(-12*(1-p)).toFixed(2)}deg) scale(${(s0*p).toFixed(4)})`;
+     eNum.setAttribute('fill','#8C9AA8');eStk.style.filter='none';}
+   else if(t<land){const q=eLine.getPointAtLength(Lt*ep),sc=Math.exp(lerp(l0,l1,eMark(P(t,f0,land-f0))));
+     eStk.style.transform=`translate(${q.x.toFixed(1)}px,${q.y.toFixed(1)}px) rotate(${lerp(-8,-2,ep).toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+     eStk.style.filter='drop-shadow(0 16px 32px rgba(4,8,12,.55))';
+     eNum.setAttribute('fill',mixc('8C9AA8',OR,clamp(ep*2.0)));}
+   else{const dt=t-land,fl=oC(P(t,land+.4,land+1.3)),x=G[0],y=G[1]-4*Math.sin(dt*2.4)*fl,sc=1+.08*wob(dt,4.2,7.7)+.004*Math.sin(dt*2.4)*fl;
+     eStk.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${(-2+1.1*wob(dt,3,7)).toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+     eStk.style.filter='drop-shadow(0 13px 28px rgba(4,8,12,.5))';
+     eNum.setAttribute('fill','#FF5A36');}
+  }
+  eMP.setAttribute('stroke-dashoffset',1-ep);eLine.style.opacity=t>=f0?1:0;
+  eDot.setAttribute('cx',Dp.x.toFixed(1));eDot.setAttribute('cy',Dp.y.toFixed(1));eDot.setAttribute('r',(8*oB(P(t,f0,.25),2)).toFixed(2));
+  const rp=Math.max(0,t-land)%1.15/1.15;eRing.setAttribute('cx',Dp.x.toFixed(1));eRing.setAttribute('cy',Dp.y.toFixed(1));eRing.setAttribute('r',(8+15*oC(rp)).toFixed(2));eRing.style.opacity=t>land?.6*(1-rp):0;
+  const qf=P(t,land,.18);eFl.setAttribute('cx',G[0]);eFl.setAttribute('cy',G[1]);eFl.setAttribute('r',(150+200*oC(qf)).toFixed(1));eFl.setAttribute('stroke-width',(13*(1-qf)).toFixed(2));eFl.style.opacity=t>=land&&qf<1?1-qf:0;
+  const ku=oC(P(t,EV.endkick,.5));eK.style.opacity=ku;eK.style.transform=`translateY(${(1-ku)*16}px)`;
+  const hu=oX(P(t,EV.head,.55));eH.style.opacity=clamp(P(t,EV.head,.18));eH.style.transform=`translateY(${(1-hu)*26}px)`;
+  eUnit.style.opacity=oC(P(t,EV.slam+.3,.5));eUnit2.style.opacity=oC(P(t,EV.slam+.45,.5));
+  eMk.style.transform=`scaleX(${ioC(P(t,EV.tag,.5))})`;
+  const cu=oC(P(t,EV.cap,.55));eC.style.opacity=cu;eC.style.transform=`translateY(${(1-cu)*16}px)`;
+  const gu=oC(P(t,EV.tag+.1,.45));eTag.style.opacity=gu;eTag.style.transform=`translateX(${(1-gu)*-26}px)`;
+  eSrc.style.opacity=.8*oC(P(t,EV.src,.6));
+});
+/* ---------------- frame ---------------- */
+window.renderAt=async(t)=>{
+  const C=cam(t);
+  world.style.transform=`translate(${(960-C.x*C.z).toFixed(3)}px,${(540-C.y*C.z).toFixed(3)}px) scale(${C.z.toFixed(6)})`;
+  for(const f of U)f(t,C);
+};
+await document.fonts.ready;
+for(const w of ['400','500','700','900','1000'])try{await document.fonts.load(`${w} 60px "Alibaba PuHuiTi"`,'读得越多为什么反而越便宜输入和输出不按同一套算缓存只存四分之一小模型赢了自己的旗舰能看图也便宜到可以随手用同样的上下文结构跑分成本')}catch(e){}
+for(const w of ['500','600','700','800','900'])try{await document.fonts.load(`${w} 60px "Inter"`,'0123456789./$ABC%×')}catch(e){}
+try{await document.fonts.load('600 60px "JetBrains Mono"','0123456789ABC·')}catch(e){}
+await window.renderAt(0);
+window.__ready=true;
+
+/* ---------------- preview player ----------------
+   Shown only in a real browser (never under the render harness / probe, which set
+   navigator.webdriver). Force it with ?play=1, suppress it with ?play=0.
+   Adds audio, play/pause, scrubbing and keyboard shortcuts — no files are written. */
+{
+  const q=new URLSearchParams(location.search);
+  const forced=q.get('play');
+  const agent=navigator.webdriver===true;
+  const on=forced==='1'||(forced!=='0'&&!agent);
+  if(on){
+    const DUR=cues.duration, CHT=cues.chapters, CHN=cues.chapter_names;
+    document.documentElement.style.cssText+=';background:#0B1015';
+    document.body.style.background='#0B1015';
+    const stage=document.getElementById('stage');
+    stage.style.transformOrigin='0 0';
+    const BAR=104;
+    const fit=()=>{const avail=Math.max(240,innerHeight-BAR);
+      const s=Math.min(innerWidth/1920,avail/1080);
+      stage.style.transform=`translate(${((innerWidth-1920*s)/2).toFixed(2)}px,${((avail-1080*s)/2).toFixed(2)}px) scale(${s.toFixed(5)})`;};
+    addEventListener('resize',fit);fit();
+
+    const A=new Audio('./out/audio.wav');A.preload='auto';
+    const audioOK=()=>A.readyState>=2&&!A.error;
+
+    const bar=document.createElement('div');
+    bar.style.cssText=`position:fixed;left:0;right:0;bottom:0;height:${BAR}px;display:flex;align-items:center;
+      gap:20px;padding:0 30px;background:#0E151C;border-top:1px solid #22303C;z-index:9999;
+      font:500 15px/1 Inter,system-ui,sans-serif;color:#E9EEF2;user-select:none;box-sizing:border-box`;
+    bar.innerHTML=`
+      <button id="pp" style="all:unset;cursor:pointer;width:54px;height:54px;border-radius:50%;
+        background:#FF5A36;display:flex;align-items:center;justify-content:center;flex:0 0 auto">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="#0E151C"><path id="ppi" d="M5 3l12 7-12 7z"/></svg>
+      </button>
+      <div style="flex:1;display:flex;flex-direction:column;gap:9px;min-width:0">
+        <div style="display:flex;align-items:baseline;gap:12px;font-family:'JetBrains Mono',monospace;
+          font-size:13px;letter-spacing:.04em;color:#8C9AA8">
+          <span id="tt" style="color:#E9EEF2">00:00.0</span>
+          <span style="opacity:.5">/ 01:00.0</span>
+          <span id="cc" style="margin-left:6px;font-family:'Alibaba PuHuiTi','Inter',sans-serif;
+            font-size:14px;letter-spacing:.02em;color:#FF5A36"></span>
+        </div>
+        <input id="scr" type="range" min="0" max="600" value="0" step="1"
+          style="width:100%;height:5px;appearance:none;border-radius:3px;background-color:#22303C;outline:none;cursor:pointer">
+      </div>
+      <button id="lp" style="all:unset;cursor:pointer;padding:9px 14px;border-radius:8px;font:600 13px 'JetBrains Mono',monospace;
+        letter-spacing:.08em;color:#E9EEF2;box-shadow:inset 0 0 0 1px #2C3B48">LOOP</button>
+      <button id="mu" style="all:unset;cursor:pointer;padding:9px 14px;border-radius:8px;font:600 13px 'JetBrains Mono',monospace;
+        letter-spacing:.08em;color:#E9EEF2;box-shadow:inset 0 0 0 1px #2C3B48">SOUND</button>`;
+    document.body.appendChild(bar);
+    const st=document.createElement('style');
+    st.textContent=`#scr::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+      background:#FF5A36;box-shadow:0 0 0 3px #0E151C;cursor:pointer}
+      #scr{background-image:linear-gradient(#FF5A36,#FF5A36);background-repeat:no-repeat;background-size:0% 100%}
+`;
+    document.head.appendChild(st);
+
+    const $=id=>bar.querySelector('#'+id);
+    const pp=$('pp'),ppi=$('ppi'),tt=$('tt'),cc=$('cc'),scr=$('scr'),lp=$('lp'),mu=$('mu');
+    let t=clampT(Number(q.get('t')||0)),playing=false,loop=true,muted=false,last=performance.now();
+    function clampT(v){return Math.max(0,Math.min(DUR-.001,Number(v)||0));}
+    const fmt=v=>String(Math.floor(v/60)).padStart(2,'0')+':'+String(Math.floor(v%60)).padStart(2,'0')+'.'+Math.floor((v%1)*10);
+    const chName=v=>{let k=0;for(let i=0;i<CHT.length;i++)if(v>=CHT[i])k=i;return CHN[k]||'';};
+
+    function seek(v,{play=playing}={}){
+      t=clampT(v);if(audioOK())A.currentTime=t;
+      window.renderAt(t);ui();
+      if(play&&!playing)start();
+    }
+    function start(){playing=true;ppi.setAttribute('d','M5 3h3v14H5zM12 3h3v14h-3z');
+      if(audioOK()){if(Math.abs(A.currentTime-t)>.02)A.currentTime=t;A.play().catch(()=>{});}}
+    function stop(){playing=false;ppi.setAttribute('d','M5 3l12 7-12 7z');A.pause();}
+    function ui(){
+      tt.textContent=fmt(t);cc.textContent=chName(t);
+      scr.value=Math.round(t*10);
+      scr.style.backgroundSize=(t/DUR*100).toFixed(2)+'% 100%';
+    }
+    function frame(now){
+      const dt=Math.min(.12,(now-last)/1000);last=now;
+      if(playing){
+        if(audioOK()&&!A.paused&&A.currentTime>0)t=A.currentTime;
+        else t+=dt;
+        if(t>=DUR-.001){
+          if(loop){t=0;if(audioOK())A.currentTime=0;A.play().catch(()=>{});}
+          else {t=DUR-.001;stop();}
+        }
+        window.renderAt(t);ui();
+      }
+      requestAnimationFrame(frame);
+    }
+    pp.onclick=()=>playing?stop():start();
+    document.getElementById('stage').addEventListener('click',()=>playing?stop():start());
+    scr.oninput=()=>seek(scr.value/10);
+    const paintLp=()=>{lp.style.background=loop?'#FF5A36':'transparent';
+      lp.style.color=loop?'#0E151C':'#E9EEF2';lp.style.boxShadow=loop?'none':'inset 0 0 0 1px #2C3B48';};
+    lp.onclick=()=>{loop=!loop;paintLp();};paintLp();
+    mu.onclick=()=>{muted=!muted;A.muted=muted;mu.style.color=muted?'#8C9AA8':'#E9EEF2';
+      mu.textContent=muted?'MUTED':'SOUND';};
+    addEventListener('keydown',e=>{
+      if(e.code==='Space'){e.preventDefault();playing?stop():start();}
+      else if(e.code==='ArrowRight'){seek(t+(e.shiftKey?5:1));}
+      else if(e.code==='ArrowLeft'){seek(t-(e.shiftKey?5:1));}
+      else if(e.code==='KeyL'){lp.onclick();}
+      else if(e.code==='Home'){seek(0);}
+    });
+    const hint=document.createElement('div');
+    hint.style.cssText=`position:fixed;left:50%;top:22px;transform:translateX(-50%);padding:9px 18px;border-radius:999px;
+      background:rgba(14,21,28,.86);color:#9AA8B5;font:500 13px Inter,sans-serif;letter-spacing:.02em;z-index:9999;
+      transition:opacity .6s;pointer-events:none`;
+    hint.textContent='空格 播放/暂停 · ← → 快退/快进 · 拖动进度条逐帧看';
+    document.body.appendChild(hint);
+    setTimeout(()=>{hint.style.opacity='0';},4200);
+
+    window.renderAt(t);ui();
+    requestAnimationFrame(t=>{last=t;requestAnimationFrame(frame);});
+    A.addEventListener('error',()=>{mu.textContent='NO AUDIO';mu.style.color='#8C9AA8';});
+  }
+}
+</script></body></html>

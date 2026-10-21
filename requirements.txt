@@ -1,0 +1,8 @@
+# soundtrack synthesis (lib/audio + each film's audio.py)
+numpy>=2.0
+scipy>=1.13
+soundfile>=0.12
+numba>=0.60
+pedalboard>=0.9
+pyloudnorm>=0.1.1
+matplotlib>=3.8

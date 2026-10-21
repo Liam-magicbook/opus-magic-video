@@ -1,0 +1,12 @@
+# deps (no trailing slash: the per-film node_modules are symlinks, not directories)
+node_modules
+.venv
+__pycache__
+*.pyc
+
+# os / editor
+.DS_Store
+*.log
+
+# render scratch (regenerable, large)
+*.mkv
