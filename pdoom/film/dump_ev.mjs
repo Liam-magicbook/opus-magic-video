@@ -1,0 +1,13 @@
+import { chromium } from '/Users/oceann/Desktop/workspace/video_prototype/lemo-opuscar/node_modules/playwright-core/index.mjs';
+import { serve, pageURL } from '/Users/oceann/Desktop/workspace/video_prototype/lemo-opuscar/core/render/serve.mjs';
+import fs from 'node:fs';
+const LIB='/Users/oceann/Desktop/workspace/video_prototype/lemo-opuscar';
+const { port } = await serve(LIB, 0);
+const b = await chromium.launch();
+const p = await b.newPage({ viewport:{width:1920,height:1080} });
+await p.goto(pageURL(LIB, port, process.cwd()));
+await p.waitForFunction(()=>window.READY===true, null, {timeout:120000});
+const r = await p.evaluate(()=>({ dur: window.DUR, ev: window.EV }));
+fs.writeFileSync('events.json', JSON.stringify(r, null, 1));
+console.log(r.ev.length, r.dur);
+await b.close(); process.exit(0);

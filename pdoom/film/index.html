@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>P(doom) — 一份关于末日的案卷</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #F4ECDD; }
+  svg, canvas { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  #paper { mix-blend-mode: multiply; pointer-events: none; }
+  #fx { pointer-events: none; }
+  .mul { mix-blend-mode: multiply; }
+</style>
+</head>
+<body>
+<svg id="stage" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="boil" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence id="boilT" type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="1" result="w"/>
+      <feDisplacementMap in="SourceGraphic" in2="w" scale="5" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" seed="4" result="g"/>
+      <feColorMatrix in="g" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -22 15.2" result="gm"/>
+      <feComposite in="d" in2="gm" operator="in"/>
+    </filter>
+    <filter id="stampInk" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="11" result="w"/>
+      <feDisplacementMap in="SourceGraphic" in2="w" scale="7" xChannelSelector="R" yChannelSelector="G" result="d"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="3" seed="21" result="g"/>
+      <feColorMatrix in="g" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -9 5.9" result="gm"/>
+      <feComposite in="d" in2="gm" operator="in"/>
+    </filter>
+    <clipPath id="frameClip"><rect width="1920" height="1080"/></clipPath>
+  </defs>
+  <g clip-path="url(#frameClip)">
+    <g id="cam"><g id="world"></g><g id="capLayer"></g></g>
+    <g id="hud"></g>
+    <g id="wipe"></g>
+    <rect id="flash" width="1920" height="1080" fill="#FFFFFF" opacity="0"/>
+    <rect id="fade" width="1920" height="1080" fill="#1D2340" opacity="0"/>
+  </g>
+</svg>
+<canvas id="paper" width="1920" height="1080"></canvas>
+<canvas id="fx" width="1920" height="1080"></canvas>
+
+<script type="module">
+import { C, F, FPS, el, txt, tf, op, show, clamp, seg, lerp, E, measure, rng, setCaptionHost, beginScene, endScene, sceneCaps } from './js/lib.js';
+import scenesA from './js/scenes-a.js';
+import scenesB from './js/scenes-b.js';
+import scenesC from './js/scenes-c.js';
+import scenesD from './js/scenes-d.js';
+import scenesE from './js/scenes-e.js';
+
+const DUR = 156.651;
+const BEAT0 = 0.238, BEATP = 0.45452;
+const world = document.getElementById('world');
+const cam = document.getElementById('cam');
+const hud = document.getElementById('hud');
+const wipe = document.getElementById('wipe');
+const flash = document.getElementById('flash');
+const fade = document.getElementById('fade');
+const scenes = [];
+function scene(t0, t1, build, opts = {}) {
+  const g = el('g', {}, world);
+  const s = { g, t0, t1, dark: !!opts.dark };
+  beginScene(g);
+  s.update = build(g, s);
+  endScene();
+  s.update = s.update || (() => {});
+  s.caps = sceneCaps(g);
+  // 暗场判定：取场景里铺得最大的那块底色
+  let best = null, bestA = 0;
+  for (const c of g.children) {
+    if (c.tagName !== 'rect') continue;
+    const a = (+c.getAttribute('width') || 0) * (+c.getAttribute('height') || 0);
+    if (a > bestA) { bestA = a; best = c; }
+  }
+  s.dark = !!best && ['#18203F', '#1D2340', '#10152E', '#101733', '#10173333'].includes(best.getAttribute('fill'));
+  scenes.push(s);
+  return s;
+}
+
+setCaptionHost(document.getElementById('capLayer'));
+// 字体没就位之前不建版：宽度量错就会叠字（这个坑风格文档里写了）
+let built = false;
+function buildAll() {
+  world.textContent = '';
+  document.getElementById('capLayer').textContent = '';
+  scenes.length = 0;
+  scenesA(scene); scenesB(scene); scenesC(scene); scenesD(scene); scenesE(scene);
+  built = true;
+}
+
+// ---------------- HUD ----------------
+const hudG = el('g', {}, hud);
+const casePlate = el('g', {}, hudG);
+const caseBg = el('rect', { x: 46, y: 34, width: 372, height: 38, rx: 6, 'stroke-width': 3 }, casePlate);
+const caseNo = txt(casePlate, 'CASE No.2026-DOOM-001', { x: 60, y: 61, 'font-size': 21, 'font-family': F.mono, 'font-weight': 800 });
+const chip = el('g', {}, hudG);
+const chipBg = el('rect', { x: 46, y: 76, height: 36, rx: 6 }, chip);
+const chipA = txt(chip, '', { x: 60, y: 102, 'font-size': 21, 'font-family': F.sans, 'font-weight': 900 });
+const chipB = txt(chip, '', { y: 102, 'font-size': 21, 'font-family': F.sans, 'font-weight': 900 });
+const meter = el('g', {}, hudG);
+const meterBg = el('rect', { x: 1584, y: 34, width: 290, height: 78, rx: 8, 'stroke-width': 3 }, meter);
+const rec = el('circle', { cx: 1608, cy: 90, r: 8, fill: C.red }, meter);
+const meterT = txt(meter, 'P(doom)', { x: 1626, y: 64, 'font-size': 19, 'font-family': F.mono, 'font-weight': 800, 'letter-spacing': 2 });
+const meterV = txt(meter, '—', { x: 1852, y: 104, 'font-size': 40, 'font-family': F.mono, 'font-weight': 800, 'text-anchor': 'end' });
+const CHIPS = [
+  [2.056, 16.6, 'VOL.1', 'INDICTMENT'],
+  [16.6, 22.055, 'VOL.1', 'STATEMENT'],
+  [22.055, 38.418, 'VOL.2', 'UPPING'],
+  [38.418, 58.417, 'VOL.2', 'ACCELERATE'],
+  [58.417, 74.779, 'VOL.3', 'THE BOOM'],
+  [74.779, 89.324, 'VOL.3', 'THE FENCES'],
+  [89.324, 94.778, 'VOL.3', 'THE ASK'],
+  [94.778, 109.323, 'VOL.4', 'REDLINE'],
+  [109.323, 123.868, 'VOL.4', 'BRIDGE'],
+  [123.868, 140.23, 'VOL.5', 'THE VERDICT'],
+  [140.23, 151.15, 'CODA', 'FILED'],
+];
+const PDOOM = [[23.0, '0.62'], [59.3, '0.79'], [95.5, '0.94'], [125.0, '1.00']];
+let currentDark = false;
+function hudUpdate(t) {
+  const c = CHIPS.find(c => t >= c[0] && t < c[1]);
+  show(hudG, !!c);
+  if (!c) return;
+  const dark = currentDark;
+  const ink = dark ? C.cream : C.navy;
+  // 底板：亮场用纸色、暗场用深色，保证 HUD 永远压在网点之上可读
+  caseBg.setAttribute('fill', dark ? C.navy : C.paper);
+  caseBg.setAttribute('stroke', ink);
+  caseNo.setAttribute('fill', ink);
+  chipBg.setAttribute('fill', dark ? C.cream : C.navy);
+  chipA.textContent = c[2]; chipA.setAttribute('fill', dark ? C.red : C.yellow);
+  chipB.textContent = c[3]; chipB.setAttribute('fill', dark ? C.navy : C.cream);
+  const wa = measure(c[2], 21, F.sans), wb = measure(c[3], 21, F.sans);
+  chipB.setAttribute('x', 60 + wa + 12);
+  chipBg.setAttribute('width', wa + wb + 36);
+  const wc = measure('CASE No.2026-DOOM-001', 21, F.mono) + 28;
+  caseBg.setAttribute('width', wc);
+  meterBg.setAttribute('fill', dark ? C.navy : C.paper);
+  meterBg.setAttribute('stroke', ink); meterT.setAttribute('fill', ink);
+  op(rec, Math.floor(t * 2) % 2 ? 0.25 : 1);
+  show(meter, t >= 22.05 && t < 151.15);
+  let v = '—';
+  for (const [tv, sv] of PDOOM) if (t >= tv) v = sv;
+  meterV.textContent = v;
+  meterV.setAttribute('fill', v === '1.00' ? C.red : dark ? C.yellow : C.navy);
+}
+
+// ---------------- 网点转场 ----------------
+const dotsG = el('g', {}, wipe);
+const wipeDots = [];
+for (let y = 0; y <= 1080 + 80; y += 80) for (let x = 0; x <= 1920 + 80; x += 80) wipeDots.push({ el: el('circle', { cx: x, cy: y, r: 0 }, dotsG), x, y });
+const WIPES = [
+  [2.056, C.yellow], [5.88, C.pink], [7.72, C.blue], [9.52, C.pink], [13.16, C.navy], [16.6, C.pink],
+  [22.055, C.navy], [24.32, C.yellow], [26.32, C.blue], [29.91, C.night], [33.4, C.navy], [38.418, C.yellow],
+  [41.34, C.blue], [45.06, C.pink], [49.56, C.cream], [52.962, C.pink], [58.417, C.navy], [60.58, C.night],
+  [62.54, C.yellow], [64.1, C.night], [66.22, C.navy], [69.76, C.yellow], [74.779, C.blue], [77.72, C.pink],
+  [81.21, C.yellow], [85.0, C.pink], [89.324, C.night], [94.778, C.navy], [96.84, C.yellow], [98.82, C.blue],
+  [100.72, C.pink], [102.46, C.yellow], [105.96, C.blue], [109.323, C.yellow], [113.34, C.pink], [115.2, C.night],
+  [117.02, C.blue], [118.75, C.night], [120.76, C.pink], [124.52, C.navy], [126.12, C.yellow], [127.92, C.blue],
+  [129.82, C.pink], [132.02, C.yellow], [137.38, C.pink], [140.23, C.paper],
+];
+function wipeUpdate(t) {
+  const w = WIPES.find(([b]) => Math.abs(t - b) < 0.22);
+  show(dotsG, !!w);
+  if (!w) return;
+  dotsG.setAttribute('fill', w[1]);
+  const u = (t - w[0] + 0.22) / 0.44;
+  wipeDots.forEach(d => {
+    const delay = (d.x / 1920 * 0.6 + d.y / 1080 * 0.4) * 0.35;
+    const p = clamp((u - delay) / 0.65);
+    d.el.setAttribute('r', (Math.sin(p * Math.PI) * 62).toFixed(1));
+  });
+}
+
+// ---------------- 冲击与闪光 ----------------
+const SHAKES = [
+  [2.056, 6, 0.2], [8.62, 16, 0.3], [11.146, 7, 0.2], [20.24, 9, 0.25],
+  [23.0, 20, 0.36], [58.417, 12, 0.28], [61.05, 10, 0.25], [62.54, 8, 0.2],
+  [70.34, 14, 0.3], [79.4, 16, 0.32], [82.9, 12, 0.28], [87.3, 14, 0.3],
+  [95.5, 10, 0.24], [98.86, 6, 0.18], [105.7, 8, 0.2], [113.7, 9, 0.24],
+  [117.15, 12, 0.26], [117.7, 12, 0.26], [118.25, 12, 0.26], [125.0, 26, 0.45],
+  [126.9, 6, 0.18], [130.3, 8, 0.2], [136.2, 10, 0.24], [149.34, 18, 0.34],
+];
+const FLASHES = [[3.2, 0.9, 0.26], [4.2, 0.9, 0.26], [125.0, 0.5, 0.14], [138.0, 0.35, 0.14], [138.28, 0.35, 0.14], [138.56, 0.35, 0.14], [138.84, 0.35, 0.14]];
+
+const boilT = document.getElementById('boilT');
+function render(t) {
+  if (!built) return;
+  const frame = Math.round(t * FPS);
+  boilT.setAttribute('seed', 1 + (Math.floor(t * 10) % 40));
+  for (const s of scenes) {
+    const on = t >= s.t0 && t < s.t1;
+    if (on) currentDark = s.dark;
+    show(s.g, on);
+    for (const c of s.caps) { if (!on) { c.g.style.display = 'none'; if (c.zhG) c.zhG.style.display = 'none'; } else { c.g.style.display = ''; if (c.zhG) c.zhG.style.display = ''; } }
+    if (on) s.update(t);
+  }
+  let dx = 0, dy = 0;
+  for (const [t0, a, d] of SHAKES) {
+    if (t >= t0 && t < t0 + d) { const k = 1 - (t - t0) / d; dx += a * k * k * Math.sin(t * 91 + t0); dy += a * k * k * Math.cos(t * 77 + t0 * 3); }
+  }
+  // 鼓点脉冲（只在副歌/律动段）
+  const groove = (t >= 22.055 && t < 36.6) || (t >= 58.417 && t < 74.779) || (t >= 94.778 && t < 109.323) || (t >= 123.868 && t < 140.23) || (t >= 38.4 && t < 52.9);
+  const ph = ((t - BEAT0) % BEATP + BEATP) % BEATP;
+  // 1.03 的常备余量：震动位移不会把世界边缘抖出画面（否则顶部会露出纸色）
+  const pulse = (groove ? 1 + 0.006 * Math.exp(-ph / 0.07) : 1) * 1.03;
+  cam.setAttribute('transform', `translate(${(dx + 960 * (1 - pulse)).toFixed(2)} ${(dy + 540 * (1 - pulse)).toFixed(2)}) scale(${pulse.toFixed(4)})`);
+  let fl = 0;
+  for (const [f, a, d] of FLASHES) if (t >= f && t < f + d) fl = Math.max(fl, a * Math.pow(1 - (t - f) / d, 2));
+  op(flash, fl);
+  op(fade, seg(t, 155.75, 156.6));
+  hudUpdate(t);
+  wipeUpdate(t);
+  drawFx(frame);
+}
+
+// ---------------- 纸 & 颗粒 ----------------
+function buildPaper() {
+  const cv = document.getElementById('paper'), ctx = cv.getContext('2d');
+  const img = ctx.createImageData(1920, 1080);
+  const r = rng(3);
+  const small = document.createElement('canvas'); small.width = 96; small.height = 54;
+  const sctx = small.getContext('2d'); const sim = sctx.createImageData(96, 54);
+  for (let i = 0; i < sim.data.length; i += 4) { const v = 242 + r() * 13; sim.data[i] = sim.data[i + 1] = sim.data[i + 2] = v; sim.data[i + 3] = 255; }
+  sctx.putImageData(sim, 0, 0);
+  ctx.imageSmoothingEnabled = true; ctx.drawImage(small, 0, 0, 1920, 1080);
+  const base = ctx.getImageData(0, 0, 1920, 1080);
+  for (let i = 0; i < base.data.length; i += 4) {
+    const n = (r() - 0.5) * 26;
+    base.data[i] = clamp(base.data[i] + n, 0, 255);
+    base.data[i + 1] = clamp(base.data[i + 1] + n, 0, 255);
+    base.data[i + 2] = clamp(base.data[i + 2] + n - 4, 0, 255);
+  }
+  ctx.putImageData(base, 0, 0);
+  const gr = ctx.createRadialGradient(960, 540, 420, 960, 540, 1160);
+  gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(120,100,80,0.34)');
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, 1920, 1080);
+  ctx.strokeStyle = 'rgba(140,120,100,0.16)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(960, 0); ctx.lineTo(962, 1080); ctx.stroke();
+  img.data.set(base.data);
+}
+function drawFx(frame) {
+  const cv = document.getElementById('fx'), ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, 1920, 1080);
+  const r = rng(1000 + Math.floor(frame / 2));
+  ctx.fillStyle = 'rgba(255,248,235,0.72)';
+  for (let i = 0; i < 500; i++) { ctx.beginPath(); ctx.arc(r() * 1920, r() * 1080, 0.6 + r() * 1.8, 0, 7); ctx.fill(); }
+  ctx.fillStyle = 'rgba(29,35,64,0.22)';
+  for (let i = 0; i < 90; i++) { ctx.beginPath(); ctx.arc(r() * 1920, r() * 1080, 0.6 + r() * 1.3, 0, 7); ctx.fill(); }
+}
+
+// ---------------- 音效事件（给 music_sfx.py 读） ----------------
+window.EV = [
+  ...WIPES.map(([t, c]) => ({ t: +(t - 0.2).toFixed(3), type: 'wipe' })),
+  { t: 3.2, type: 'shutter' }, { t: 4.2, type: 'shutter' },
+  { t: 5.95, type: 'circuit' },
+  { t: 8.62, type: 'stamp', big: 0 },
+  { t: 11.146, type: 'thud' },
+  { t: 16.6, type: 'boom' },
+  { t: 23.0, type: 'stamp', big: 1 },
+  { t: 24.36, type: 'foom' },
+  { t: 26.6, type: 'paper', n: 7 },
+  { t: 27.94, type: 'bloom' },
+  { t: 30.0, type: 'shoggoth' },
+  { t: 33.4, type: 'sub' },
+  { t: 38.5, type: 'tread' },
+  { t: 41.4, type: 'implode' },
+  { t: 45.06, type: 'conveyor' },
+  { t: 49.56, type: 'atoms' },
+  { t: 53.0, type: 'glass_tap' },
+  { t: 57.2, type: 'crack' },
+  { t: 59.3, type: 'gauge' },
+  { t: 61.05, type: 'roar' },
+  { t: 62.54, type: 'tick' }, { t: 63.0, type: 'tick' }, { t: 63.5, type: 'tick' },
+  { t: 64.2, type: 'omega' },
+  { t: 66.3, type: 'flops' },
+  { t: 70.34, type: 'stamp_big' },
+  { t: 72.3, type: 'slip' },
+  { t: 74.86, type: 'loop' },
+  { t: 78.4, type: 'bar' },
+  { t: 79.4, type: 'stamp' },
+  { t: 82.9, type: 'snap' },
+  { t: 85.3, type: 'check', n: 5 },
+  { t: 87.3, type: 'stamp_big' },
+  { t: 89.4, type: 'creak' },
+  { t: 95.5, type: 'gauge' },
+  { t: 96.9, type: 'clips' },
+  { t: 98.86, type: 'plug' },
+  { t: 99.0, type: 'sticky' },
+  { t: 102.46, type: 'fuse' },
+  { t: 106.0, type: 'sub' },
+  { t: 109.4, type: 'tower' },
+  { t: 113.7, type: 'stamp' },
+  { t: 117.15, type: 'fence' }, { t: 117.7, type: 'fence' }, { t: 118.25, type: 'fence' },
+  { t: 118.8, type: 'fan' },
+  { t: 121.4, type: 'rlhf' },
+  { t: 125.0, type: 'shatter' },
+  { t: 126.2, type: 'loom' },
+  { t: 128.0, type: 'mask', n: 9 },
+  { t: 130.3, type: 'recurse' },
+  { t: 132.1, type: 'sub' },
+  { t: 133.4, type: 'slide' }, { t: 134.6, type: 'slide' },
+  { t: 137.46, type: 'curtain' },
+  { t: 138.0, type: 'shutter' }, { t: 138.28, type: 'shutter' }, { t: 138.56, type: 'shutter' },
+  { t: 140.23, type: 'room' },
+  { t: 149.34, type: 'stamp_miss' },
+  { t: 151.4, type: 'bell' },
+];
+
+window.DUR = DUR;
+window.render = render;
+
+async function init() {
+  // 场景与歌词都在独立的模块文件里，这里把它们一起拉进来，保证每个字形都在建版之前就位
+  const mods = ['./js/lib.js', './js/props.js', './js/clawd.js', './js/lyrics.js', './js/scenes-a.js', './js/scenes-b.js', './js/scenes-c.js', './js/scenes-d.js', './js/scenes-e.js'];
+  let srcs = '';
+  for (const m of mods) { try { srcs += await (await fetch(m)).text(); } catch (e) { console.warn('font sample miss', m); } }
+  const fams = ['900 50px "Noto Serif SC"', '400 50px "ZCOOL KuaiLe"', '400 50px "Bagel Fat One"', '800 50px "JetBrains Mono"', '500 50px "JetBrains Mono"', '900 50px "Noto Sans SC"', '500 50px "Noto Sans SC"', '900 50px "Noto Sans SC"'];
+  // 可打印 ASCII 全部进 sample（标题里的括号也是字形，漏了就会用 fallback 量宽、字距压成负的）
+  let ascii = '';
+  for (let c = 32; c < 127; c++) ascii += String.fromCharCode(c);
+  const sample = ascii + srcs + document.documentElement.innerHTML;
+  await Promise.all(fams.map(f => document.fonts.load(f, sample)));
+  await document.fonts.ready;
+  buildPaper();
+  buildAll();
+  // 第二轮：建版后真的出现的字形也确认已加载
+  const built2 = document.getElementById('stage').textContent;
+  await Promise.all(fams.map(f => document.fonts.load(f, built2)));
+  await document.fonts.ready;
+  const q = new URLSearchParams(location.search);
+  window.DUR = DUR;
+  render(parseFloat(q.get('t') || '0'));
+  window.READY = true;
+}
+init();
+</script>
+</body>
+</html>

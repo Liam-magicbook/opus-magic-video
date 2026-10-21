@@ -1,13 +1,15 @@
 # opus-magic-video
 
-三支从代码渲染出来的短片。每支片子都是**单文件时间轴 + `window.renderAt(t)` 可确定性寻帧**：
+四支从代码渲染出来的短片。每支片子都是**单文件时间轴 + `window.renderAt(t)` 可确定性寻帧**：
 画面、配乐、音效共用同一张 `cues.json`，所以改时间只改一处。
+（`pdoom/` 是长片特例：156 秒、音乐已有独立声源，时间轴来自 `data/lyrics.json` 的词级时间戳。）
 
 | 片子 | 时长 | 风格 | 成片 |
 |---|---|---|---|
 | [`deepseek-v41-flash/`](deepseek-v41-flash/) | 60s | 纸面/贴纸风 MG，技术拆解 | `out/video.mp4` 未渲染（HTML 预览） |
 | [`pixel-teyvat/`](pixel-teyvat/) | 10s | 320×180 像素冒险 + CRT | [`out/video.mp4`](pixel-teyvat/out/video.mp4) |
 | [`cel-boil-splash/`](cel-boil-splash/) | 10s | 逐帧手绘 / line boil | [`out/video.mp4`](cel-boil-splash/out/video.mp4) |
+| [`pdoom/`](pdoom/) | 156s | 复古半调案卷（47 场景 / 46 句歌词） | [`pdoom-web.mp4`](pdoom/pdoom-web.mp4) |
 
 `out/stills/` 里是逐时间点的校验静帧——不渲染整片也能看构图。
 

@@ -1,0 +1,39 @@
+P(doom) — CASE FILE No.2026-DOOM-001
+====================================
+
+一支 2 分 36 秒的动画短片，主角是 Claude 的小精灵 Clawd。
+全片是一份编号 2026-DOOM-001 的案卷：46 句歌词逐条归档，
+P(doom) 仪表在四个位置上调（0.62 → 0.79 → 0.94 → 1.00），
+最后一次读数把玻璃打碎；结尾镜头拉远，桌上是成千上万份同款案卷。
+
+时长 / Duration
+  156.651 s（与歌曲等长），1920×1080，30 fps，H.264 + AAC 256 k
+
+音乐 / Music
+  "I'm Upping My P(doom)" — Claude-Pop 版（Suno，2026-09 @slimer48484）
+  原曲直接使用，未重写；只叠加印厂拟音（印章、纸滑、快门、玻璃裂、回形针等）
+
+视觉 / Look
+  「复古半调案卷」：纸色底 + 网点 + 错版套色阴影 + 厚墨线 + 印章 + 网点转场。
+  画面上所有文字为英文；字体为 Noto Serif SC / Noto Sans SC / JetBrains Mono /
+  Bagel Fat One / ZCOOL KuaiLe，全部本地 woff2 子集。
+
+技术 / Built with
+  纯 HTML + SVG + CSS + ES modules，由 Chromium（playwright-core）逐帧截图，
+  ffmpeg 编码。没有使用任何动画框架、素材库或模板。
+  拟音由 numpy/scipy 程序合成（music_sfx.py），与音轨在 ffmpeg 中混流。
+
+字幕
+  pdoom.srt —— 46 行英文唱词（与画面内嵌字幕同源，来自 data/lyrics.json）
+
+文件
+  pdoom.mp4     成片
+  poster.jpg    海报（第 1.6 s 的封面帧）
+  pdoom.srt     英文字幕
+  film/         全部源码与工程（index.html + js/ + fonts/）
+  events.json   与画面同源的拟音事件时间表（由页面导出）
+
+  重跑：
+    cd film && node render.mjs video 6      # 渲染帧 → out/video.mp4
+    cd .. && .venv/bin/python music_sfx.py  # 合成拟音 → film/mix.wav
+    cd film && node render.mjs mux ../pdoom.mp4

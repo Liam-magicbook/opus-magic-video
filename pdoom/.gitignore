@@ -1,0 +1,27 @@
+# deps
+.venv
+node_modules
+__pycache__
+*.pyc
+
+# os
+.DS_Store
+*.log
+
+# 渲染中间产物（可按块重跑，不进仓库）
+film/out/
+film/stills/
+film/stills2/
+film/stills3/
+film/sheet/
+film/sheet2/
+film/sheetA.png
+film/sheetB.png
+film/sheetC.png
+film/sheetD.png
+film/sheetE.png
+film/sheetF.png
+
+# 成片：本地保留 1080p 母版（524MB，超 GitHub 100MB 限制，不入库）
+# 仓库里只放 pdoom-web.mp4（CRF 28 网页版，约 70MB）
+pdoom.mp4

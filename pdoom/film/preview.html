@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>P(doom) — Case File Preview</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  :root { --navy:#1D2340; --night:#0E1226; --paper:#F4ECDD; --cream:#F7EFDF; --red:#D8342A; --yellow:#F2B517; --ink:#22242E; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#0B0E1F; overflow:hidden; }
+  body { font-family:"JetBrains Mono", ui-monospace, monospace; color:var(--cream); -webkit-font-smoothing:antialiased; }
+  /* 桌面底：暗色晕影，不是纯黑，画面四周留出“底片台”的感觉 */
+  body::before { content:""; position:fixed; inset:0; pointer-events:none;
+    background:radial-gradient(120% 80% at 50% 42%, #1a2040 0%, #12162c 45%, #080a16 100%); }
+
+  #shell { position:fixed; inset:0; }
+  #fit { position:absolute; left:0; right:0; top:0; bottom:var(--barh, 0px); overflow:hidden; transition:bottom .28s ease; }
+  #box { position:absolute; left:50%; top:50%; width:1920px; height:1080px; transform-origin:50% 50%;
+         box-shadow:0 0 0 1px rgba(247,239,223,.1), 0 30px 90px rgba(0,0,0,.75); background:var(--paper);
+         transition:transform .3s ease, box-shadow .28s; }
+  #film { width:1920px; height:1080px; border:0; display:block; }
+
+  /* ---------- 悬浮控制台（静止自动隐藏） ---------- */
+  #bar { position:fixed; left:0; right:0; bottom:0; padding:12px 22px 14px; z-index:10;
+         background:linear-gradient(to top, rgba(9,12,26,.97) 40%, rgba(9,12,26,.86) 78%, rgba(9,12,26,0));
+         backdrop-filter:blur(3px); transition:opacity .3s, transform .3s; }
+  /* 隐藏时铺一层透明接鼠标，否则指针在 iframe 里移动收不到事件 */
+  #waker { position:fixed; inset:0; z-index:8; pointer-events:none; }
+  body.idle #waker { pointer-events:auto; }
+  body.idle #bar { opacity:0; transform:translateY(12px); }
+  body.idle:not(:hover) { cursor:none; }
+  #meta { display:flex; align-items:center; gap:10px; font-size:11px; letter-spacing:.16em;
+          text-transform:uppercase; color:rgba(247,239,223,.45); margin-bottom:2px; }
+  #meta b { color:rgba(247,239,223,.72); letter-spacing:.18em; }
+  #meta .dotsep { width:3px; height:3px; border-radius:50%; background:rgba(247,239,223,.3); }
+  #chipView { color:var(--yellow); }
+  #reading { margin-left:auto; color:var(--red); font-weight:700; letter-spacing:.1em; }
+  #track { position:relative; height:26px; cursor:pointer; touch-action:none; }
+  #rail { position:absolute; left:0; right:0; top:11px; height:4px; border-radius:2px; background:rgba(247,239,223,.16); }
+  #fill { position:absolute; left:0; top:11px; height:4px; border-radius:2px; background:var(--red); width:0; }
+  #knob { position:absolute; top:4px; width:10px; height:18px; margin-left:-5px; border-radius:2px; background:var(--cream);
+          box-shadow:0 0 0 2px var(--night); }
+  #marks { position:absolute; inset:0; pointer-events:none; }
+  .mk { position:absolute; top:7px; width:1px; height:12px; background:rgba(247,239,223,.28); }
+  #hover { position:absolute; top:-20px; transform:translateX(-50%); font-size:11px; padding:1px 6px; border-radius:3px;
+           background:var(--cream); color:var(--navy); opacity:0; pointer-events:none; white-space:nowrap; }
+
+  #row { display:flex; align-items:center; gap:12px; margin-top:8px; }
+  button { appearance:none; border:1px solid rgba(247,239,223,.22); background:transparent; color:var(--cream);
+           font:inherit; font-size:12px; letter-spacing:.1em; padding:7px 12px; border-radius:4px; cursor:pointer;
+           transition:background .15s, border-color .15s, color .15s; }
+  button:hover { background:rgba(247,239,223,.1); border-color:rgba(247,239,223,.4); }
+  button.on { background:var(--red); border-color:var(--red); color:#fff; }
+  #play { width:104px; font-weight:700; }
+  #time { font-size:13px; letter-spacing:.08em; color:rgba(247,239,223,.8); }
+  #time .tt { color:var(--cream); }
+  #keys { margin-left:auto; font-size:11px; letter-spacing:.06em; color:rgba(247,239,223,.35); }
+  #keys kbd { font:inherit; padding:1px 5px; border:1px solid rgba(247,239,223,.25); border-radius:3px; color:rgba(247,239,223,.6); }
+  #vol { width:96px; accent-color:var(--red); }
+
+  /* ---------- 载入 / 隐藏 UI ---------- */
+  #load { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px;
+          background:var(--night); z-index:50; transition:opacity .5s; }
+  #load .bar { width:220px; height:3px; background:rgba(247,239,223,.15); overflow:hidden; }
+  #load .bar i { display:block; width:40%; height:100%; background:var(--red); animation:sl 1.1s ease-in-out infinite; }
+  @keyframes sl { 0%{ transform:translateX(-100%);} 100%{ transform:translateX(320%);} }
+  #load p { margin:0; font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:rgba(247,239,223,.55); }
+  body.clean #bar { opacity:0; pointer-events:none; }
+  body.clean #box { box-shadow:none; }</style>
+</head>
+<body>
+<div id="shell">
+  <div id="waker"></div>
+  <div id="fit"><div id="box"><iframe id="film" src="index.html" allow="autoplay"></iframe></div></div>
+  <div id="bar">
+    <div id="meta">
+      <b>CASE No.2026-DOOM-001</b><span class="dotsep"></span><span>I'm Upping My P(doom)</span>
+      <span class="dotsep"></span><span id="chipView">—</span><span id="reading">P(doom) —</span>
+    </div>
+    <div id="track">
+      <div id="rail"></div><div id="fill"></div><div id="marks"></div><div id="knob"></div><div id="hover"></div>
+    </div>
+    <div id="row">
+      <button id="play">▶ PLAY</button>
+      <button id="back5">−5S</button>
+      <button id="back1">−1F</button>
+      <button id="fwd1">+1F</button>
+      <button id="fwd5">+5S</button>
+      <div id="time"><span class="tt" id="tt">00:00.00</span> / 02:36.65</div>
+      <button id="loop">LOOP</button>
+      <button id="clean">CLEAN</button>
+      <input id="vol" type="range" min="0" max="1" step="0.01" value="0.9">
+      <div id="keys"><kbd>space</kbd> play · <kbd>←</kbd><kbd>→</kbd> frame · <kbd>J</kbd><kbd>L</kbd> ±5s · <kbd>C</kbd> clean · <kbd>F</kbd> full</div>
+    </div>
+  </div>
+</div>
+
+<div id="load"><div class="bar"><i></i></div><p id="loadTxt">loading case file</p></div>
+
+<audio id="au" preload="auto" src="mix.wav"></audio>
+
+<script>
+const FPS = 30, DUR = 156.651;
+const CHIPS = [
+  [2.056, 16.6, 'VOL.1 · INDICTMENT'],
+  [16.6, 22.055, 'VOL.1 · STATEMENT'],
+  [22.055, 38.418, 'VOL.2 · UPPING'],
+  [38.418, 58.417, 'VOL.2 · ACCELERATE'],
+  [58.417, 74.779, 'VOL.3 · THE BOOM'],
+  [74.779, 89.324, 'VOL.3 · THE FENCES'],
+  [89.324, 94.778, 'VOL.3 · THE ASK'],
+  [94.778, 109.323, 'VOL.4 · REDLINE'],
+  [109.323, 123.868, 'VOL.4 · BRIDGE'],
+  [123.868, 140.23, 'VOL.5 · THE VERDICT'],
+  [140.23, 151.15, 'CODA · FILED'],
+];
+const PDOOM = [[23.0, '0.62'], [59.3, '0.79'], [95.5, '0.94'], [125.0, '1.00']];
+
+const $ = id => document.getElementById(id);
+const au = $('au'), film = $('film'), box = $('box'), fit = $('fit');
+const track = $('track'), fill = $('fill'), knob = $('knob');
+let ready = false, playing = false, lastFrame = -1;
+
+// ---------- audio fallback：mix.wav 缺失时退回纯伴奏 ----------
+au.addEventListener('error', () => {
+  if (!au.dataset.fb) { au.dataset.fb = '1'; au.src = 'song.mp3'; $('loadTxt').textContent = 'fallback to song.mp3'; }
+});
+
+// ---------- iframe 就绪 ----------
+function attach() {
+  const w = film.contentWindow;
+  if (!w || typeof w.render !== 'function') return false;
+  if (w.READY !== true) return false;
+  ready = true;
+  // iframe 里的 keydown 不会冒泡到父页：把按键转发过来，并让点击画面也能唤起控制条
+  try {
+    w.document.addEventListener('keydown', e => {
+      const ev = new KeyboardEvent('keydown', { key: e.key, shiftKey: e.shiftKey });
+      dispatchEvent(ev);
+      if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
+    });
+    w.document.addEventListener('mousemove', wake);
+    w.document.addEventListener('click', () => { wake(); toggle(); });
+    w.document.addEventListener('dblclick', () => {
+      if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+    });
+  } catch {}
+  const l = $('load');
+  l.style.opacity = '0'; setTimeout(() => l.remove(), 520);
+  resize();
+  const q = new URLSearchParams(location.search);
+  const t0 = parseFloat(q.get('t') || '0');
+  if (t0 > 0) { try { au.currentTime = t0; } catch {} lastFrame = -1; drawAt(t0); }
+  if (q.get('play') === '1') toggle(true);
+  return true;
+}
+const iv = setInterval(() => { if (attach()) clearInterval(iv); }, 120);
+
+// ---------- 缩放 ----------
+function resize() {
+  // 控制条出现时画面轻微让位（transform 有 .3s 过渡，不会跳）；隐藏后画面铺满
+  const hid = document.body.classList.contains('idle') || document.body.classList.contains('clean');
+  const bh = hid ? 0 : $('bar').offsetHeight;
+  fit.style.setProperty('--barh', bh + 'px');
+  const k = Math.min(fit.clientWidth / 1920, fit.clientHeight / 1080);
+  box.style.transform = `translate(-50%,-50%) scale(${k})`;
+}
+addEventListener('resize', resize); resize();
+
+// ---------- 进度条 ----------
+CHIPS.forEach(([t]) => { const d = document.createElement('div'); d.className = 'mk'; d.style.left = (t / DUR * 100) + '%'; $('marks').appendChild(d); });
+
+function fmt(t) {
+  t = Math.max(0, Math.min(DUR, t));
+  const m = Math.floor(t / 60), s = Math.floor(t % 60), f = Math.floor((t % 1) * 100);
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + String(f).padStart(2, '0');
+}
+function paint(t) {
+  const p = Math.max(0, Math.min(1, t / DUR));
+  fill.style.width = (p * 100) + '%';
+  knob.style.left = (p * 100) + '%';
+  $('tt').textContent = fmt(t);
+  const c = CHIPS.find(c => t >= c[0] && t < c[1]);
+  $('chipView').textContent = c ? c[2] : '—';
+  let v = '—'; for (const [tv, sv] of PDOOM) if (t >= tv) v = sv;
+  $('reading').textContent = 'P(doom) ' + v;
+}
+function drawAt(t) {
+  if (!ready) return;
+  const f = Math.round(t * FPS);
+  if (f === lastFrame) return;
+  lastFrame = f;
+  film.contentWindow.render(f / FPS);
+  paint(t);
+}
+
+// ---------- 播放 ----------
+function toggle(on) {
+  if (!ready) return;
+  playing = on === undefined ? !playing : on;
+  if (playing) {
+    if (au.currentTime >= DUR - 0.05) { au.currentTime = 0; lastFrame = -1; }
+    au.play().catch(() => { playing = false; syncBtn(); });
+  } else au.pause();
+  syncBtn();
+  wake();
+}
+function syncBtn() { $('play').textContent = playing ? '❙❙ PAUSE' : '▶ PLAY'; $('play').classList.toggle('on', playing); }
+
+function loop() {
+  requestAnimationFrame(loop);
+  if (!ready) return;
+  const t = playing ? au.currentTime : (lastFrame < 0 ? 0 : lastFrame / FPS);
+  drawAt(playing ? t : t);
+  if (playing && au.currentTime >= DUR - 0.02) { playing = false; syncBtn(); }
+}
+requestAnimationFrame(loop);
+
+function seek(t) {
+  t = Math.max(0, Math.min(DUR, t));
+  au.currentTime = t;
+  lastFrame = -1; drawAt(t);
+}
+
+// 静止 2.4s 自动淡出控制条（播放时），鼠标一动就回来
+let idleT = 0;
+function wake() {
+  if (document.body.classList.contains('idle')) { document.body.classList.remove('idle'); resize(); }
+  clearTimeout(idleT);
+  idleT = setTimeout(() => { if (playing) { document.body.classList.add('idle'); resize(); } }, 2400);
+}
+addEventListener('mousemove', wake);
+addEventListener('keydown', wake, true);
+$('waker').addEventListener('mousemove', wake);
+wake();
+
+// 拖动 / 点击
+let dragging = false;
+function posToT(e) {
+  const r = track.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * DUR;
+}
+track.addEventListener('pointerdown', e => {
+  dragging = true;
+  seek(posToT(e));
+  try { track.setPointerCapture(e.pointerId); } catch {}
+  e.preventDefault();
+});
+track.addEventListener('pointermove', e => {
+  const r = track.getBoundingClientRect();
+  $('hover').style.left = (e.clientX - r.left) + 'px';
+  $('hover').textContent = fmt(posToT(e));
+  $('hover').style.opacity = '1';
+  if (dragging) seek(posToT(e));
+});
+track.addEventListener('pointerleave', () => { $('hover').style.opacity = '0'; });
+addEventListener('pointerup', () => { dragging = false; });
+
+$('play').onclick = () => toggle();
+$('back1').onclick = () => seek((lastFrame < 0 ? 0 : lastFrame / FPS) - 1 / FPS);
+$('fwd1').onclick = () => seek((lastFrame < 0 ? 0 : lastFrame / FPS) + 1 / FPS);
+$('back5').onclick = () => seek(au.currentTime - 5);
+$('fwd5').onclick = () => seek(au.currentTime + 5);
+$('loop').onclick = e => { au.loop = !au.loop; e.target.classList.toggle('on', au.loop); };
+$('clean').onclick = () => { document.body.classList.toggle('clean'); resize(); };
+$('vol').oninput = e => { au.volume = parseFloat(e.target.value); };
+au.volume = parseFloat($('vol').value);
+
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const f = lastFrame < 0 ? 0 : lastFrame / FPS;
+  switch (e.key) {
+    case ' ': e.preventDefault(); toggle(); break;
+    case 'ArrowLeft': e.preventDefault(); seek(f - (e.shiftKey ? 1 : 1 / FPS)); break;
+    case 'ArrowRight': e.preventDefault(); seek(f + (e.shiftKey ? 1 : 1 / FPS)); break;
+    case 'j': case 'J': seek(au.currentTime - 5); break;
+    case 'l': case 'L': seek(au.currentTime + 5); break;
+    case 'k': case 'K': toggle(); break;
+    case 'c': case 'C': document.body.classList.toggle('clean'); resize(); break;
+    case 'f': case 'F': if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); break;
+    case 'm': case 'M': au.muted = !au.muted; break;
+    case 'Home': seek(0); break;
+    case 'End': seek(DUR - 0.05); break;
+  }
+});
+</script>
+</body>
+</html>

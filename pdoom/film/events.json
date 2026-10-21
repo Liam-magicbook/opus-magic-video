@@ -1,0 +1,438 @@
+{
+ "dur": 156.651,
+ "ev": [
+  {
+   "t": 1.856,
+   "type": "wipe"
+  },
+  {
+   "t": 5.68,
+   "type": "wipe"
+  },
+  {
+   "t": 7.52,
+   "type": "wipe"
+  },
+  {
+   "t": 9.32,
+   "type": "wipe"
+  },
+  {
+   "t": 12.96,
+   "type": "wipe"
+  },
+  {
+   "t": 16.4,
+   "type": "wipe"
+  },
+  {
+   "t": 21.855,
+   "type": "wipe"
+  },
+  {
+   "t": 24.12,
+   "type": "wipe"
+  },
+  {
+   "t": 26.12,
+   "type": "wipe"
+  },
+  {
+   "t": 29.71,
+   "type": "wipe"
+  },
+  {
+   "t": 33.2,
+   "type": "wipe"
+  },
+  {
+   "t": 38.218,
+   "type": "wipe"
+  },
+  {
+   "t": 41.14,
+   "type": "wipe"
+  },
+  {
+   "t": 44.86,
+   "type": "wipe"
+  },
+  {
+   "t": 49.36,
+   "type": "wipe"
+  },
+  {
+   "t": 52.762,
+   "type": "wipe"
+  },
+  {
+   "t": 58.217,
+   "type": "wipe"
+  },
+  {
+   "t": 60.38,
+   "type": "wipe"
+  },
+  {
+   "t": 62.34,
+   "type": "wipe"
+  },
+  {
+   "t": 63.9,
+   "type": "wipe"
+  },
+  {
+   "t": 66.02,
+   "type": "wipe"
+  },
+  {
+   "t": 69.56,
+   "type": "wipe"
+  },
+  {
+   "t": 74.579,
+   "type": "wipe"
+  },
+  {
+   "t": 77.52,
+   "type": "wipe"
+  },
+  {
+   "t": 81.01,
+   "type": "wipe"
+  },
+  {
+   "t": 84.8,
+   "type": "wipe"
+  },
+  {
+   "t": 89.124,
+   "type": "wipe"
+  },
+  {
+   "t": 94.578,
+   "type": "wipe"
+  },
+  {
+   "t": 96.64,
+   "type": "wipe"
+  },
+  {
+   "t": 98.62,
+   "type": "wipe"
+  },
+  {
+   "t": 100.52,
+   "type": "wipe"
+  },
+  {
+   "t": 102.26,
+   "type": "wipe"
+  },
+  {
+   "t": 105.76,
+   "type": "wipe"
+  },
+  {
+   "t": 109.123,
+   "type": "wipe"
+  },
+  {
+   "t": 113.14,
+   "type": "wipe"
+  },
+  {
+   "t": 115,
+   "type": "wipe"
+  },
+  {
+   "t": 116.82,
+   "type": "wipe"
+  },
+  {
+   "t": 118.55,
+   "type": "wipe"
+  },
+  {
+   "t": 120.56,
+   "type": "wipe"
+  },
+  {
+   "t": 124.32,
+   "type": "wipe"
+  },
+  {
+   "t": 125.92,
+   "type": "wipe"
+  },
+  {
+   "t": 127.72,
+   "type": "wipe"
+  },
+  {
+   "t": 129.62,
+   "type": "wipe"
+  },
+  {
+   "t": 131.82,
+   "type": "wipe"
+  },
+  {
+   "t": 137.18,
+   "type": "wipe"
+  },
+  {
+   "t": 140.03,
+   "type": "wipe"
+  },
+  {
+   "t": 3.2,
+   "type": "shutter"
+  },
+  {
+   "t": 4.2,
+   "type": "shutter"
+  },
+  {
+   "t": 5.95,
+   "type": "circuit"
+  },
+  {
+   "t": 8.62,
+   "type": "stamp",
+   "big": 0
+  },
+  {
+   "t": 11.146,
+   "type": "thud"
+  },
+  {
+   "t": 16.6,
+   "type": "boom"
+  },
+  {
+   "t": 23,
+   "type": "stamp",
+   "big": 1
+  },
+  {
+   "t": 24.36,
+   "type": "foom"
+  },
+  {
+   "t": 26.6,
+   "type": "paper",
+   "n": 7
+  },
+  {
+   "t": 27.94,
+   "type": "bloom"
+  },
+  {
+   "t": 30,
+   "type": "shoggoth"
+  },
+  {
+   "t": 33.4,
+   "type": "sub"
+  },
+  {
+   "t": 38.5,
+   "type": "tread"
+  },
+  {
+   "t": 41.4,
+   "type": "implode"
+  },
+  {
+   "t": 45.06,
+   "type": "conveyor"
+  },
+  {
+   "t": 49.56,
+   "type": "atoms"
+  },
+  {
+   "t": 53,
+   "type": "glass_tap"
+  },
+  {
+   "t": 57.2,
+   "type": "crack"
+  },
+  {
+   "t": 59.3,
+   "type": "gauge"
+  },
+  {
+   "t": 61.05,
+   "type": "roar"
+  },
+  {
+   "t": 62.54,
+   "type": "tick"
+  },
+  {
+   "t": 63,
+   "type": "tick"
+  },
+  {
+   "t": 63.5,
+   "type": "tick"
+  },
+  {
+   "t": 64.2,
+   "type": "omega"
+  },
+  {
+   "t": 66.3,
+   "type": "flops"
+  },
+  {
+   "t": 70.34,
+   "type": "stamp_big"
+  },
+  {
+   "t": 72.3,
+   "type": "slip"
+  },
+  {
+   "t": 74.86,
+   "type": "loop"
+  },
+  {
+   "t": 78.4,
+   "type": "bar"
+  },
+  {
+   "t": 79.4,
+   "type": "stamp"
+  },
+  {
+   "t": 82.9,
+   "type": "snap"
+  },
+  {
+   "t": 85.3,
+   "type": "check",
+   "n": 5
+  },
+  {
+   "t": 87.3,
+   "type": "stamp_big"
+  },
+  {
+   "t": 89.4,
+   "type": "creak"
+  },
+  {
+   "t": 95.5,
+   "type": "gauge"
+  },
+  {
+   "t": 96.9,
+   "type": "clips"
+  },
+  {
+   "t": 98.86,
+   "type": "plug"
+  },
+  {
+   "t": 99,
+   "type": "sticky"
+  },
+  {
+   "t": 102.46,
+   "type": "fuse"
+  },
+  {
+   "t": 106,
+   "type": "sub"
+  },
+  {
+   "t": 109.4,
+   "type": "tower"
+  },
+  {
+   "t": 113.7,
+   "type": "stamp"
+  },
+  {
+   "t": 117.15,
+   "type": "fence"
+  },
+  {
+   "t": 117.7,
+   "type": "fence"
+  },
+  {
+   "t": 118.25,
+   "type": "fence"
+  },
+  {
+   "t": 118.8,
+   "type": "fan"
+  },
+  {
+   "t": 121.4,
+   "type": "rlhf"
+  },
+  {
+   "t": 125,
+   "type": "shatter"
+  },
+  {
+   "t": 126.2,
+   "type": "loom"
+  },
+  {
+   "t": 128,
+   "type": "mask",
+   "n": 9
+  },
+  {
+   "t": 130.3,
+   "type": "recurse"
+  },
+  {
+   "t": 132.1,
+   "type": "sub"
+  },
+  {
+   "t": 133.4,
+   "type": "slide"
+  },
+  {
+   "t": 134.6,
+   "type": "slide"
+  },
+  {
+   "t": 137.46,
+   "type": "curtain"
+  },
+  {
+   "t": 138,
+   "type": "shutter"
+  },
+  {
+   "t": 138.28,
+   "type": "shutter"
+  },
+  {
+   "t": 138.56,
+   "type": "shutter"
+  },
+  {
+   "t": 140.23,
+   "type": "room"
+  },
+  {
+   "t": 149.34,
+   "type": "stamp_miss"
+  },
+  {
+   "t": 151.4,
+   "type": "bell"
+  }
+ ]
+}
