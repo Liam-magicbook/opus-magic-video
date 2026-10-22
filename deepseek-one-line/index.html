@@ -1,0 +1,1813 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>一条线 · DeepSeek 2023—2026</title>
+<style>
+  @font-face{font-family:'Archivo';src:url('assets/fonts/Archivo-w1000-500.ttf');font-weight:500}
+  @font-face{font-family:'Archivo';src:url('assets/fonts/Archivo-w1000-700.ttf');font-weight:700}
+  @font-face{font-family:'Archivo';src:url('assets/fonts/Archivo-w1000-900.ttf');font-weight:900}
+  @font-face{font-family:'ArchivoN';src:url('assets/fonts/Archivo-w875-700.ttf');font-weight:700}
+  @font-face{font-family:'ArchivoWide';src:url('assets/fonts/Archivo-w1125-900.ttf');font-weight:900}
+  @font-face{font-family:'PlexMono';src:url('assets/fonts/IBMPlexMono-Light.ttf');font-weight:300}
+  @font-face{font-family:'PlexMono';src:url('assets/fonts/IBMPlexMono-Regular.ttf');font-weight:400}
+  @font-face{font-family:'PlexMono';src:url('assets/fonts/IBMPlexMono-Medium.ttf');font-weight:500}
+  @font-face{font-family:'Corm';src:url('assets/fonts/CormorantItalic-400.ttf');font-style:italic}
+  html,body{margin:0;background:#000;overflow:hidden}
+  #c{display:block;width:2048px;height:858px}
+</style></head>
+<body><canvas id="c" width="2048" height="858"></canvas>
+<script type="module">
+/* ============================================================================
+   一条线 · DeepSeek 2023—2026     60 s · 2.39:1 · 24 fps
+   ---------------------------------------------------------------------------
+   27 shots. One line runs through all of them and every chapter turns it into a
+   different concrete object: a plotter stroke, a rack of channels, a price tag,
+   a receipt, an oscilloscope trace, a woven cloth, an odometer, a corridor,
+   and finally a single line again.
+
+   Every pixel is a pure function of t. Nothing animates by itself.
+   ========================================================================== */
+const W = 2048, H = 858;
+const INK = '#08090A', INK2 = '#151517', BONE = '#EFEAE1', GRAY = '#8A857C',
+      SIGNAL = '#FF4D12', EMBER = '#FF8A3D', PAPER = '#E9E3D6', PAPER2 = '#F3EEE3';
+
+const cv = document.getElementById('c');
+const g = cv.getContext('2d', { alpha: false });
+const CUES = await (await fetch('cues.json', { cache: 'no-store' })).json();
+const E = CUES.ev;
+
+/* ------------------------------ fonts ------------------------------ */
+for (const [fam, file, wt, st] of [
+  ['Archivo', 'Archivo-w1000-500.ttf', '500', ''], ['Archivo', 'Archivo-w1000-700.ttf', '700', ''],
+  ['Archivo', 'Archivo-w1000-900.ttf', '900', ''], ['ArchivoN', 'Archivo-w875-700.ttf', '700', ''],
+  ['ArchivoWide', 'Archivo-w1125-900.ttf', '900', ''], ['PlexMono', 'IBMPlexMono-Light.ttf', '300', ''],
+  ['PlexMono', 'IBMPlexMono-Regular.ttf', '400', ''], ['PlexMono', 'IBMPlexMono-Medium.ttf', '500', ''],
+  ['Corm', 'CormorantItalic-400.ttf', '400', 'italic'],
+]) {
+  const ff = new FontFace(fam, `url(assets/fonts/${file})`, { weight: wt, style: st || 'normal' });
+  await ff.load(); document.fonts.add(ff);
+}
+await document.fonts.load('400 40px "Songti SC"').catch(() => {});
+await document.fonts.load('500 40px "PingFang SC"').catch(() => {});
+await document.fonts.ready;
+
+/* ------------------------------ maths ------------------------------ */
+const cl = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+const lerp = (a, b, u) => a + (b - a) * u;
+const P = (t, a, d) => cl((t - a) / d);
+const oC = u => 1 - Math.pow(1 - u, 3);
+const oQ = u => 1 - Math.pow(1 - u, 4);
+const oX = u => (u >= 1 ? 1 : 1 - Math.pow(2, -10 * u));
+const iQ = u => u * u;
+const iC = u => u * u * u;
+const ioC = u => (u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+const ioS = u => -(Math.cos(Math.PI * u) - 1) / 2;
+const iEx = u => (u <= 0 ? 0 : Math.pow(2, 10 * u - 10));
+const oB = u => { const c = 1.9; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
+const spring = (u, s = 1.7) => (u <= 0 ? 0 : 1 + (s + 1) * Math.pow(u - 1, 3) + s * Math.pow(u - 1, 2));
+const wave = (u, f, ph = 0) => Math.sin(u * f * Math.PI * 2 + ph);
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+/* ------------------------------ type ------------------------------ */
+const FAM = { arch: 'Archivo', archN: 'ArchivoN', wide: 'ArchivoWide', mono: 'PlexMono', song: '"Songti SC"', sans: '"PingFang SC"', corm: 'Corm' };
+function text(s, x, y, o = {}) {
+  const { size = 24, family = 'mono', weight = 400, color = BONE, align = 'left',
+    baseline = 'alphabetic', alpha = 1, sp = 0, rot = 0 } = o;
+  if (alpha <= .004 || s === '' || s == null) return;
+  g.save();
+  g.globalAlpha = cl(alpha);
+  g.fillStyle = color;
+  g.textAlign = align; g.textBaseline = baseline;
+  g.font = `${weight ? weight + ' ' : ''}${size}px ${FAM[family] || family}`;
+  g.letterSpacing = `${sp}px`;
+  if (rot) { g.translate(x, y); g.rotate(rot); g.fillText(s, 0, 0); }
+  else g.fillText(s, x, y);
+  g.restore();
+}
+function measure(s, o = {}) {
+  g.save();
+  g.font = `${o.weight ? o.weight + ' ' : ''}${o.size || 24}px ${FAM[o.family] || o.family || FAM.mono}`;
+  g.letterSpacing = `${o.sp || 0}px`;
+  const w = g.measureText(s).width; g.restore(); return w;
+}
+/* rises out of its own mask — used for lines that arrive with the beat */
+function rise(s, x, y, o, prog) {
+  if (prog <= .001) return;
+  const size = o.size || 24, e = oX(cl(prog, 0, 1));
+  g.save();
+  g.beginPath(); g.rect(x - 3000, y - size * 3, 7000, size * 4); g.clip();
+  text(s, x, y + (1 - e) * size * 1.15, { ...o, alpha: (o.alpha ?? 1) * cl(prog * 2.6) });
+  g.restore();
+}
+/* scale-settles in on the hit */
+function slam(s, x, y, o, prog, from = 1.14) {
+  if (prog <= 0) return;
+  const e = spring(cl(prog, 0, 1), 1.5), sc = lerp(from, 1, e);
+  g.save(); g.translate(x, y); g.scale(sc, sc);
+  text(s, 0, 0, { ...o, alpha: (o.alpha ?? 1) * cl(prog * 3.4) });
+  g.restore();
+}
+/* types on, with a caret — receipts, forms, terminals */
+function typeIn(s, x, y, o, prog) {
+  if (prog <= 0) return;
+  const n = Math.ceil(s.length * cl(prog, 0, 1));
+  text(s.slice(0, n), x, y, { ...o, alpha: (o.alpha ?? 1) * cl(prog * 6) });
+  if (prog < .999) {
+    const w = measure(s.slice(0, n), o), blk = (o.size || 20) * .5;
+    g.save(); g.globalAlpha = cl(prog * 6) * .85; g.fillStyle = o.color || BONE;
+    g.fillRect(x + w + (o.size || 20) * .07, y - blk * .78, blk * .46, blk); g.restore();
+  }
+}
+/* big numbers that count */
+function counter(v, x, y, o, decimals = 0) {
+  text(decimals ? v.toFixed(decimals) : fmt(v), x, y, o);
+}
+
+/* ------------------------------ primitives ------------------------------ */
+function line(x1, y1, x2, y2, o = {}) {
+  const { w = 1.4, color = BONE, alpha = 1, cap = 'butt', dash = null } = o;
+  if (alpha <= .004) return;
+  g.save(); g.globalAlpha = alpha; g.strokeStyle = color; g.lineWidth = w; g.lineCap = cap;
+  if (dash) g.setLineDash(dash);
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); g.restore();
+}
+function poly(pts, o = {}) {
+  const { w = 1.6, color = BONE, alpha = 1, cap = 'round', join = 'round', dash = null, close = false } = o;
+  if (alpha <= .004 || pts.length < 2) return;
+  g.save(); g.globalAlpha = alpha; g.strokeStyle = color; g.lineWidth = w; g.lineCap = cap; g.lineJoin = join;
+  if (dash) g.setLineDash(dash);
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  if (close) g.closePath();
+  g.stroke(); g.restore();
+}
+function fillPoly(pts, color, alpha = 1) {
+  if (alpha <= .004 || pts.length < 3) return;
+  g.save(); g.globalAlpha = alpha; g.fillStyle = color;
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  g.closePath(); g.fill(); g.restore();
+}
+function box(x, y, w, h, color, alpha = 1) {
+  if (alpha <= .004 || w === 0 || h === 0) return;
+  g.save(); g.globalAlpha = alpha; g.fillStyle = color; g.fillRect(x, y, w, h); g.restore();
+}
+function dot(x, y, r, color = BONE, alpha = 1) {
+  if (alpha <= .004) return;
+  g.save(); g.globalAlpha = alpha; g.fillStyle = color;
+  g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); g.restore();
+}
+function ring(x, y, r, o = {}) {
+  const { w = 1.2, color = BONE, alpha = 1, dash = null, a0 = 0, a1 = 6.2832 } = o;
+  if (alpha <= .004) return;
+  g.save(); g.globalAlpha = alpha; g.strokeStyle = color; g.lineWidth = w;
+  if (dash) g.setLineDash(dash);
+  g.beginPath(); g.arc(x, y, r, a0, a1); g.stroke(); g.restore();
+}
+/* the spark: white core, orange halo, four flickering rays */
+function spark(x, y, a = 1, s = 1, t = 0) {
+  if (a <= .004) return;
+  const fl = .86 + .14 * Math.sin(t * 91.7) * Math.sin(t * 57.3);
+  const gr = g.createRadialGradient(x, y, 0, x, y, 42 * s);
+  gr.addColorStop(0, 'rgba(255,250,242,1)');
+  gr.addColorStop(.09, 'rgba(255,190,130,.98)');
+  gr.addColorStop(.28, 'rgba(255,122,58,.52)');
+  gr.addColorStop(1, 'rgba(255,74,24,0)');
+  g.save(); g.globalAlpha = a * fl; g.fillStyle = gr;
+  g.beginPath(); g.arc(x, y, 42 * s, 0, 6.2832); g.fill(); g.restore();
+  dot(x, y, 3.2 * s, SIGNAL, a);
+  dot(x, y, 1.5 * s, '#FFF8EF', a);
+  for (let i = 0; i < 4; i++) {
+    const ang = i * 1.5708 + t * 2.4 + .4, r = (13 + 6 * ((Math.sin(t * 30 + i) + 1) / 2)) * s;
+    line(x, y, x + Math.cos(ang) * r, y + Math.sin(ang) * r, { w: 1.1 * s, color: EMBER, alpha: a * .7 });
+  }
+}
+/* diagonal hatching clipped to a rect — engraving / section walls */
+function hatch(x, y, w, h, o = {}) {
+  const { ang = -.72, gap = 7, color = BONE, alpha = .5, lw = 1.1, phase = 0 } = o;
+  if (alpha <= .004) return;
+  g.save();
+  g.beginPath(); g.rect(x, y, w, h); g.clip();
+  g.globalAlpha = alpha; g.strokeStyle = color; g.lineWidth = lw;
+  const dx = Math.cos(ang), dy = Math.sin(ang), len = Math.abs(w) + Math.abs(h) + 80;
+  const nx = -dy, ny = dx;
+  const cx = x + w / 2, cy = y + h / 2, R = Math.hypot(w, h) / 2 + 20;
+  const n = Math.ceil((2 * R) / gap);
+  g.beginPath();
+  for (let i = -n; i <= n; i++) {
+    const ox = cx + nx * (i * gap + phase), oy = cy + ny * (i * gap + phase);
+    g.moveTo(ox - dx * R, oy - dy * R); g.lineTo(ox + dx * R, oy + dy * R);
+  }
+  g.stroke(); g.restore();
+}
+/* dashed guide rectangle — the frame's own safe areas */
+function guideRect(x, y, w, h, o = {}) {
+  const { color = BONE, alpha = .5, w: lw = 1.2, dash = [9, 9] } = o;
+  if (alpha <= .004) return;
+  g.save(); g.globalAlpha = alpha; g.strokeStyle = color; g.lineWidth = lw; g.setLineDash(dash);
+  g.strokeRect(x, y, w, h); g.restore();
+}
+/* engineering dimension line with ticks and a centred label */
+function dim(x1, y1, x2, y2, label, o = {}) {
+  const { color = EMBER, alpha = .85, size = 13, vertical = false, off = 10 } = o;
+  line(x1, y1, x2, y2, { w: 1, color, alpha });
+  const t = 7;
+  if (vertical) {
+    line(x1 - t, y1, x1 + t, y1, { w: 1, color, alpha });
+    line(x2 - t, y2, x2 + t, y2, { w: 1, color, alpha });
+  } else {
+    line(x1, y1 - t, x1, y1 + t, { w: 1, color, alpha });
+    line(x2, y2 - t, x2, y2 + t, { w: 1, color, alpha });
+  }
+  if (!label) return;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const lw = measure(label, { size, family: 'mono', sp: 1.2 }) + 12;
+  g.save(); g.globalAlpha = alpha;
+  g.fillStyle = INK; g.fillRect(mx - lw / 2, my - size * .8, lw, size * 1.15);
+  g.restore();
+  text(label, mx, my + size * .1, { size, family: 'mono', sp: 1.2, color, alpha, align: 'center' });
+}
+/* crop marks, camera bookends */
+function cropMarks(a = 1, inset = 64, len = 46) {
+  if (a <= .004) return;
+  const L = inset, R = W - inset, T = inset, B = H - inset;
+  const c = { w: 1.6, color: BONE, alpha: a * .75 };
+  for (const [x, y, sx, sy] of [[L, T, 1, 1], [R, T, -1, 1], [L, B, 1, -1], [R, B, -1, -1]]) {
+    line(x, y, x + sx * len, y, c);
+    line(x, y, x, y + sy * len, c);
+  }
+}
+function offscreen(w, h, fn) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const cx = c.getContext('2d'); fn(cx, w, h); return c;
+}
+
+/* ------------------------------ film grain ------------------------------ */
+const NOISE = offscreen(200, 200, (cx) => {
+  const im = cx.createImageData(200, 200), r = mulberry32(90210);
+  for (let i = 0; i < 200 * 200; i++) {
+    const v = 128 + (r() - .5) * 215;
+    im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v; im.data[i * 4 + 3] = 255;
+  }
+  cx.putImageData(im, 0, 0);
+});
+const NOISE_PAT = g.createPattern(NOISE, 'repeat');
+const VIGNETTE = offscreen(W, H, (cx) => {
+  const gr = cx.createRadialGradient(W * .5, H * .46, H * .2, W * .5, H * .5, W * .72);
+  gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(.6, 'rgba(0,0,0,0.14)');
+  gr.addColorStop(1, 'rgba(0,0,0,0.58)');
+  cx.fillStyle = gr; cx.fillRect(0, 0, W, H);
+});
+
+/* ------------------------------ camera ------------------------------ */
+/* keys: [lt, zoom, x, y, rotDeg?]  — every shot declares its own move */
+function camAt(keys, lt) {
+  let a = keys[0], b = keys[keys.length - 1];
+  for (let i = 0; i < keys.length - 1; i++)
+    if (lt >= keys[i][0] && lt <= keys[i + 1][0]) { a = keys[i]; b = keys[i + 1]; break; }
+  if (lt >= b[0]) { a = b; b = b; }
+  const u = a === b ? 0 : ioC(cl((lt - a[0]) / (b[0] - a[0] || 1), 0, 1));
+  return {
+    z: Math.exp(lerp(Math.log(a[1]), Math.log(b[1]), u)),
+    x: lerp(a[2] || 0, b[2] || 0, u),
+    y: lerp(a[3] || 0, b[3] || 0, u),
+    r: lerp(a[4] || 0, b[4] || 0, u) * Math.PI / 180,
+  };
+}
+function shakeAt(t) {
+  let s = 0;
+  for (const [tt, amp, dec] of [[E.cliff + .04, 26, 6.2], [21.66, 12, 12], [18.1, 8, 9], [44.45, 7, 10]]) {
+    const d = t - tt; if (d >= 0 && d < 1.2) s += amp * Math.exp(-d * dec);
+  }
+  return s;
+}
+function noiseAt(t, k) { return mulberry32(1000 + Math.round(t * 24) + k * 977)() - .5; }
+
+/* ------------------------------ HUD ------------------------------ */
+/* only the crop-mark frame and a hairline progress rail — no corner readouts */
+function hud(t, a = 1, dark = false) {
+  const col = dark ? INK : BONE;
+  line(132, H - 40, 1916 - 120, H - 40, { w: 1, color: col, alpha: .1 * a });
+  line(132, H - 40, 132 + (1916 - 132 - 120) * cl(t / 60), H - 40, { w: 1.4, color: SIGNAL, alpha: .55 * a });
+}
+
+/* ============================================================================
+   01 · ORIGIN — the sheet and the pen
+   ========================================================================== */
+function Sheet(a = 1) {
+  // the construction grid: bone hairlines, orange major ticks
+  for (let x = 0; x < W; x += 46) line(x, 0, x, H, { w: .7, color: BONE, alpha: .062 * a });
+  for (let y = 0; y < H; y += 46) line(0, y, W, y, { w: .7, color: BONE, alpha: .062 * a });
+  for (let x = 0; x <= W; x += 230) {
+    line(x, 0, x, H, { w: 1, color: BONE, alpha: .1 * a });
+    line(x, 0, x, 10, { w: 1, color: SIGNAL, alpha: .5 * a });
+    line(x, H - 10, x, H, { w: 1, color: SIGNAL, alpha: .5 * a });
+  }
+  for (let y = 0; y <= H; y += 230) {
+    line(0, y, W, y, { w: 1, color: BONE, alpha: .1 * a });
+    line(0, y, 10, y, { w: 1, color: SIGNAL, alpha: .5 * a });
+    line(W - 10, y, W, y, { w: 1, color: SIGNAL, alpha: .5 * a });
+  }
+}
+function s1a(t, lt) {
+  const p = P(lt, 0, 1.55);
+  box(0, 0, W, H, INK);
+  Sheet(1);
+  cropMarks(cl(P(lt, .05, .7)) * cl(1 - P(lt, 2.1, .3)) * .9, 64, 46);
+
+  const y = 566;
+  // the pen: a hairline being plotted left → right, with the head visible.
+  // The opening frame is never empty: the sheet, the grid, and a short stroke already exist.
+  const x = 150 + 1740 * oQ(.04 + .96 * p);
+  line(150, y, x, y, { w: 2.6, color: BONE, alpha: .95 });
+  line(150, y, x, y, { w: 6, color: SIGNAL, alpha: .12 });
+  spark(x, y, 1, 1.05, t);
+
+  // the TikZ-style listing, typed — the model's first definition
+  const code = [
+    'model DeepSeekV0 {',
+    '  layers      = 61',
+    '  hidden      = 7168',
+    '  experts     = 1        // not yet',
+    '  objective   = next_token',
+    '}',
+  ];
+  const cA = P(lt, .35, 1.3);
+  if (cA > 0) {
+    text('fig. 01', 150, 132, { size: 11, family: 'mono', sp: 4, color: SIGNAL, alpha: .8 * cl(cA * 2) });
+    for (let i = 0; i < code.length; i++) {
+      const a = P(lt, .35 + i * .11, .3);
+      text(code[i], 150, 170 + i * 27, { size: 15, family: 'mono', sp: .4, color: GRAY, alpha: .8 * a });
+    }
+  }
+  // the sheet's title block, bottom left — a drawing, not a slide
+  const tb = P(lt, .6, .8);
+  if (tb > 0) {
+    line(150, H - 150, 700, H - 150, { w: 1, color: BONE, alpha: .25 * tb });
+    line(150, H - 96, 700, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(150, H - 150, 150, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(430, H - 150, 430, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(560, H - 150, 560, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(700, H - 150, 700, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    text('DRAWN BY', 160, H - 128, { size: 8, family: 'mono', sp: 2, color: GRAY, alpha: .8 * tb });
+    text('a single line', 160, H - 110, { size: 12, family: 'mono', sp: .6, color: BONE, alpha: .75 * tb });
+    text('DURATION', 440, H - 128, { size: 8, family: 'mono', sp: 2, color: GRAY, alpha: .8 * tb });
+    text('60.0 s', 440, H - 110, { size: 12, family: 'mono', sp: .6, color: BONE, alpha: .75 * tb });
+    text('SHEET', 570, H - 128, { size: 8, family: 'mono', sp: 2, color: GRAY, alpha: .8 * tb });
+    text('01 / 08', 570, H - 110, { size: 12, family: 'mono', sp: .6, color: BONE, alpha: .75 * tb });
+  }
+  hud(t, cl(1 - P(lt, 1.8, .5)));
+}
+function s1b(t, lt) {
+  box(0, 0, W, H, INK);
+  Sheet(cl(1 - P(lt, 2.1, .5)) * .7);
+  const y = 566;
+  const a0 = cl(P(lt, 0, .5));
+  // the datum is already there, the ends register
+  line(150, y, 1898, y, { w: 2.6, color: BONE, alpha: .3 * a0 });
+  const dr = oQ(P(lt, 0, .5));
+  line(150, y, 150 + 1748 * dr, y, { w: 2.6, color: BONE, alpha: .98 });
+
+  // compass arcs ignite out of the left origin, one per beat
+  for (let i = 0; i < 3; i++) {
+    const sw = oC(P(lt, .05 + i * .13, 1.4));
+    const R = [420, 610, 780][i];
+    ring(150, y, R, { w: i === 0 ? 2.2 : 1, color: i === 0 ? SIGNAL : EMBER, alpha: (i === 0 ? .9 : .42) * sw, a0: -Math.PI * .54, a1: -Math.PI * .54 + Math.PI * 1.06 * sw });
+  }
+  // the radius, drawn and dimensioned
+  const rr = 610 * oC(P(lt, .25, 1.1));
+  const ra = -Math.PI * .17;
+  poly([[150, y], [150 + rr * Math.cos(ra), y + rr * Math.sin(ra)]], { w: 1, color: SIGNAL, alpha: .5 * cl(P(lt, .3, .4)) });
+  dim(150 + rr * Math.cos(ra) + 20, y + rr * Math.sin(ra) + 20, 150 + rr * Math.cos(ra) + 90, y + rr * Math.sin(ra) + 90, '', { alpha: .35 });
+
+  // the date, plotted on the line
+  const dIn = P(lt, .12, .62);
+  slam('2023.07.17', 146, y - 74, { size: 182, family: 'arch', weight: 900, sp: -8, color: BONE, alpha: .97 }, dIn, 1.08);
+
+  // registration ticks
+  const tk = oC(P(lt, .5, .9));
+  for (let i = 0; i <= 20; i++) {
+    const xx = 150 + i * 87.4;
+    line(xx, y + 16, xx, y + 16 + (i % 5 === 0 ? 26 : 13), { w: i % 5 === 0 ? 1.6 : 1, color: BONE, alpha: (i % 5 === 0 ? .8 : .35) * tk });
+  }
+  text('T0 · 杭州', 150, y + 88, { size: 12, family: 'mono', sp: 3, color: SIGNAL, alpha: .9 * tk });
+
+  // the two facts, small, as drawing notes
+  const fA = P(lt, 1.05, .6);
+  text('幻方量化出资 · 注册资本 1,000 万元', 1898, y - 118, { size: 18, family: 'song', color: BONE, alpha: .8 * fA, align: 'right' });
+  const fB = P(lt, 1.5, .6);
+  text('一家量化基金，决定自己训练一个模型。', 1898, y + 88, { size: 18, family: 'song', color: GRAY, alpha: .9 * fB, align: 'right' });
+  hud(t, 1 - P(lt, 2.0, .4));
+}
+
+/* ============================================================================
+   02 · ECONOMY — the rack / the price
+   ========================================================================== */
+const RACK = offscreen(W, H, (cx) => {
+  // 160 vertical slots, engraved. The engraving line weight carries the depth.
+  const n = 160, top = 96, bot = 742;
+  for (let i = 0; i < n; i++) {
+    const x = 96 + i * ((W - 192) / (n - 1));
+    const h = 300 + 340 * Math.abs(Math.sin(i * .37) * Math.cos(i * .11));
+    const y0 = bot - h;
+    cx.fillStyle = 'rgba(239,234,225,0.055)';
+    cx.fillRect(x - 3, y0, 6, h);
+    cx.strokeStyle = 'rgba(239,234,225,0.16)'; cx.lineWidth = .8;
+    cx.beginPath();
+    for (let yy = y0; yy < bot; yy += 4) { cx.moveTo(x - 3, yy); cx.lineTo(x + 3, yy + 2.4); }
+    cx.stroke();
+  }
+});
+const RACK_ACT = [40, 58, 78, 98, 118, 140];
+function s2a(t, lt) {
+  box(0, 0, W, H, INK);
+  // background haze so the rack reads as a hall, not a bar chart
+  const gr = g.createLinearGradient(0, 200, 0, H);
+  gr.addColorStop(0, 'rgba(21,21,23,0)'); gr.addColorStop(1, 'rgba(21,21,23,.9)');
+  g.save(); g.fillStyle = gr; g.fillRect(0, 0, W, H); g.restore();
+
+  g.save(); g.globalAlpha = .95; g.drawImage(RACK, 0, 0); g.restore();
+
+  // a scrim on the left, so the type has a floor to stand on
+  const sc = g.createLinearGradient(0, 0, 620, 0);
+  sc.addColorStop(0, 'rgba(8,9,10,.9)'); sc.addColorStop(.55, 'rgba(8,9,10,.55)'); sc.addColorStop(1, 'rgba(8,9,10,0)');
+  g.save(); g.fillStyle = sc; g.fillRect(0, 0, 620, H); g.restore();
+
+  // the six channels that actually fire, with their light spilling on the floor
+  for (let k = 0; k < 6; k++) {
+    const i = RACK_ACT[k];
+    const x = 96 + i * ((W - 192) / 159);
+    const a = P(lt, .02 + k * 0.08, .28);
+    if (a <= .01) continue;
+    const h = 300 + 340 * Math.abs(Math.sin(i * .37) * Math.cos(i * .11));
+    const y0 = 742 - h;
+    line(x, 742, x, y0, { w: 3.6, color: SIGNAL, alpha: a });
+    line(x, 742, x, y0, { w: 12, color: SIGNAL, alpha: .12 * a });
+    const fl = g.createLinearGradient(x - 60, 742, x + 60, 742);
+    fl.addColorStop(0, 'rgba(255,77,18,0)'); fl.addColorStop(.5, `rgba(255,77,18,${.22 * a})`); fl.addColorStop(1, 'rgba(255,77,18,0)');
+    g.save(); g.fillStyle = fl; g.fillRect(x - 60, 742, 120, 60); g.restore();
+    box(x - 5, y0 - 12, 10, 10, SIGNAL, a);
+    text('0x' + (i * 137 % 256).toString(16).toUpperCase().padStart(2, '0'), x, 782, { size: 10, family: 'mono', sp: 1, color: SIGNAL, alpha: .7 * a, align: 'center' });
+  }
+  // floor line
+  line(96, 742, W - 96, 742, { w: 1.6, color: BONE, alpha: .5 });
+  for (let x = 96; x < W - 96; x += 24) line(x, 742, x, 750, { w: 1, color: BONE, alpha: .2 });
+
+  const hA = P(lt, .02, .35);
+  text('2024.05.06  ·  DEEPSEEK-V2', 96, 74, { size: 15, family: 'mono', sp: 3, color: BONE, alpha: .85 * hA });
+  text('236B 总参数 / 21B 激活', W - 96, 74, { size: 15, family: 'mono', sp: 2, color: GRAY, alpha: .9 * hA, align: 'right' });
+  // the count, riding the rack
+  slam('160', 96, 250, { size: 112, family: 'arch', weight: 900, sp: -5, color: BONE, alpha: .97 }, P(lt, .02, .35), 1.1);
+  text('EXPERTS', 96 + measure('160', { size: 112, family: 'arch', weight: 900, sp: -5 }) + 16, 250,
+    { size: 14, family: 'mono', sp: 4, color: SIGNAL, alpha: .9 * P(lt, .12, .35) });
+  rise('每个 token 只经过其中 6 条', 96, 300, { size: 21, family: 'song', color: BONE, alpha: .95 }, P(lt, .2, .4));
+  text('160 个专家，路由器每次只点亮 6 个', 96, 336, { size: 15, family: 'mono', sp: 1, color: GRAY, alpha: .85 * P(lt, .3, .4) });
+  hud(t, 1 - P(lt, 2.1, .4));
+}
+function s2b(t, lt) {
+  box(0, 0, W, H, INK);
+  // the six, blown up: six bars only, the rest is darkness
+  const bars = [.34, .52, .41, .63, .46, .58];
+  const wts = [.19, .31, .14, .22, .08, .06];
+  for (let k = 0; k < 6; k++) {
+    const x = 300 + k * 258;
+    const a = P(lt, .02 + k * .045, .3);
+    const h = 520 * bars[k] * oC(P(lt, .02 + k * .045, .5));
+    box(x, 700 - h, 92, h, SIGNAL, .9 * a);
+    box(x, 700, 92, 6, BONE, .8 * a);
+    text('E' + String(k + 1).padStart(2, '0'), x, 736, { size: 12, family: 'mono', sp: 1.6, color: GRAY, alpha: .7 * a });
+    text(wts[k].toFixed(2), x, 762, { size: 15, family: 'mono', sp: .6, color: BONE, alpha: .85 * a });
+  }
+  line(150, 700, 1898, 700, { w: 2, color: BONE, alpha: .8 });
+  for (let x = 150; x < 1898; x += 28) line(x, 700, x, 708, { w: 1, color: BONE, alpha: .2 });
+
+  slam('6', 150, 300, { size: 300, family: 'arch', weight: 900, sp: -16, color: BONE, alpha: .98 }, P(lt, .0, .35), 1.18);
+  text('/ 160', 150 + measure('6', { size: 300, family: 'arch', weight: 900, sp: -16 }) + 26, 300,
+    { size: 64, family: 'arch', weight: 700, sp: -2, color: SIGNAL, alpha: .95 * P(lt, .18, .4) });
+  rise('激活参数 21B，不是 236B', 152, 366, { size: 26, family: 'song', color: BONE, alpha: .9 }, P(lt, .3, .5));
+  text('同样的回答质量，1/11 的算力', 152, 404, { size: 15, family: 'mono', sp: 1.6, color: GRAY, alpha: .85 * P(lt, .55, .5) });
+  text('每次激活 6 个专家，权重不同', 152, 430, { size: 15, family: 'song', color: GRAY, alpha: .8 * P(lt, .7, .5) });
+  hud(t, 1 - P(lt, 1.1, .3));
+}
+function s2c(t, lt) {
+  box(0, 0, W, H, PAPER);
+  g.save(); g.globalAlpha = .05; g.fillStyle = '#7C7057';
+  for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
+  g.restore();
+
+  // the page is a price list: two rows, one struck out
+  const a72 = P(lt, .02, .35), aStrike = P(lt, .45, .32), a1 = P(lt, .75, .45);
+  line(140, 452, 1908, 452, { w: 1.6, color: INK, alpha: .22 });
+
+  text('GPT-4 TURBO', 146, 190, { size: 13, family: 'mono', sp: 3.4, color: INK, alpha: .45 * cl(a72 * 3) });
+  slam('¥72', 140, 390, { size: 248, family: 'arch', weight: 900, sp: -12, color: INK, alpha: .34 * a72 }, a72, 1.05);
+  if (aStrike > 0) {
+    const w = measure('¥72', { size: 248, family: 'arch', weight: 900, sp: -12 });
+    line(132, 306, 132 + (w + 24) * oC(aStrike), 306, { w: 14, color: SIGNAL, alpha: .95 });
+    text('对方的价目', 150 + w + 44, 306, { size: 24, family: 'song', color: SIGNAL, alpha: .9 * aStrike });
+  }
+
+  if (a1 > 0) {
+    text('DEEPSEEK-V2', 146, 508, { size: 13, family: 'mono', sp: 3.4, color: INK, alpha: .5 * cl(a1 * 3) });
+    slam('¥1', 132, 806, { size: 330, family: 'arch', weight: 900, sp: -18, color: SIGNAL, alpha: .98 }, a1, 1.12);
+    const w1 = measure('¥1', { size: 330, family: 'arch', weight: 900, sp: -18 });
+    text('每百万 tokens 输入价', 150 + w1 + 40, 700, { size: 13, family: 'mono', sp: 2, color: INK, alpha: .5 * cl(P(lt, 1.0, .5) * 2) });
+    text('比对方便宜 70 倍以上 · 输出 ¥2', 150 + w1 + 40, 744, { size: 24, family: 'song', color: INK, alpha: .88 * cl(P(lt, 1.0, .5) * 2) });
+  }
+
+  // the table, right, big enough to read
+  const n = P(lt, .18, .6);
+  if (n > 0) {
+    const cx = 1250;
+    text('2024.05 定价页', cx, 190, { size: 12, family: 'mono', sp: 2.4, color: INK, alpha: .45 * n });
+    line(cx, 210, 1908, 210, { w: 1, color: INK, alpha: .2 * n });
+    const rows = [['V2 输入', '¥1'], ['V2 输出', '¥2'], ['缓存命中', '¥0.1'], ['上下文', '128K']];
+    for (let i = 0; i < 4; i++) {
+      const a = P(lt, .22 + i * .1, .4);
+      text(rows[i][0], cx, 262 + i * 54, { size: 19, family: 'song', color: INK, alpha: .72 * a });
+      text(rows[i][1], 1908, 262 + i * 54, { size: 22, family: 'mono', weight: 500, sp: .6, color: INK, alpha: .9 * a, align: 'right' });
+      if (i < 3) line(cx, 276 + i * 54, 1908, 276 + i * 54, { w: .8, color: INK, alpha: .12 * a });
+    }
+  }
+  hud(t, 1 - P(lt, 1.9, .3), true);
+}
+function s2d(t, lt) {
+  box(0, 0, W, H, INK);
+  // two instruments, one per beat: a cache bar and a throughput multiplier.
+  // The cut lands on content: both instruments are already labelled and lit on frame one,
+  // only the bar and the counter are mid-motion.
+  const a1 = 1, a2 = 1;
+
+  text('KV 缓存', 150, 196, { size: 13, family: 'mono', sp: 3.6, color: GRAY, alpha: .8 * a1 });
+  const bw = 780;
+  box(150, 226, bw, 54, BONE, .1 * a1);
+  const cut = oQ(P(lt, .02, .72));
+  box(150, 226, bw * lerp(1, .067, cut), 54, SIGNAL, .92 * a1);
+  // the number is already there when the cut lands — the bar is what animates
+  text('−93.3%', 150 + bw + 40, 274, { size: 86, family: 'arch', weight: 900, sp: -4, color: BONE, alpha: .96 });
+  text('KV cache 显存占用', 150, 306, { size: 17, family: 'song', color: GRAY, alpha: .9 * a1 });
+
+  text('吞吐', 150, 470, { size: 13, family: 'mono', sp: 3.6, color: GRAY, alpha: .8 * a2 });
+  // the multiplier is stated on the cut, not counted to — no fake intermediate values
+  text('×5.76', 150, 600, { size: 130, family: 'arch', weight: 900, sp: -6, color: BONE, alpha: .97 * a2 });
+  text('同一张卡上的生成速度', 150, 646, { size: 17, family: 'song', color: GRAY, alpha: .9 * a2 });
+  // the ratio bar under it
+  const bars = 24;
+  for (let i = 0; i < bars; i++) {
+    const a = P(lt, .3 + i * .012, .2);
+    box(150 + i * 34, 690, 22, 22 * (1 + .5 * (i % 3 === 0 ? 1 : 0)), BONE, .18 * a);
+  }
+  hud(t, 1 - P(lt, 1.4, .3));
+}
+
+/* ============================================================================
+   03 · COST — one long take down a receipt
+   ========================================================================== */
+const LOSS = (() => {
+  const r = mulberry32(31), out = [];
+  for (let i = 0; i <= 260; i++) {
+    const u = i / 260;
+    let y = .62 * Math.pow(1 - u, 1.6) + .1;
+    y += (Math.sin(u * 41) * .035 + Math.sin(u * 97 + 1.3) * .017) * Math.exp(-u * 1.6);
+    y += (r() - .5) * .014 * Math.exp(-u * 3);
+    y -= .02 * oC(cl((u - .86) / .05));   // the last, tiny drop
+    out.push([u, cl(y, .02, 1)]);
+  }
+  return out;
+})();
+/* The receipt is one long take — but the film keeps finding new framings inside it,
+   so it is cut as three shots with three lens lengths (see SHOTS: 3a/3b/3c).
+   They all read the same continuous clock, so the scroll never restarts. */
+function scCost(t, ltIn) {
+  const lt = t - 12.0;                       // absolute local clock, shared by all three cuts
+  const reveal = fr => fr;                    // (framing is the camera's job, not the plate's)
+  const scroll = -330 * ioC(P(lt, .15, 4.05));
+
+  box(0, 0, W, H, '#CFC7B4');
+  g.save(); g.globalAlpha = .05; g.fillStyle = '#6B5F45';
+  for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
+  g.restore();
+
+  const RX = 508, RW = 1040, BOT = 1080;
+  const Y = v => v + scroll;
+
+  // the roll: continuous paper, torn at the bottom
+  g.save();
+  g.beginPath(); g.rect(RX - 30, 0, RW + 60, H); g.clip();
+  box(RX, -700, RW, BOT + 700, PAPER2, 1);
+  g.fillStyle = PAPER2;
+  g.beginPath(); g.moveTo(RX, BOT - 2);
+  for (let i = 0; i <= 52; i++) {
+    const xx = RX + i * (RW / 52);
+    g.lineTo(xx, BOT + (i % 2 ? 0 : 15));
+  }
+  g.lineTo(RX + RW, BOT + 16); g.lineTo(RX + RW, BOT - 2); g.closePath(); g.fill();
+  // soft shadow along the tear
+  const sg = g.createLinearGradient(0, BOT + 16, 0, BOT + 70);
+  sg.addColorStop(0, 'rgba(0,0,0,.22)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.save(); g.globalCompositeOperation = 'multiply';
+  g.fillStyle = sg; g.fillRect(RX, BOT + 14, RW, 60); g.restore();
+
+  const LX = RX + 54, RXr = RX + RW - 54;
+
+  // header
+  text('DEEPSEEK · TRAINING INVOICE', LX, Y(48), { size: 12, family: 'mono', sp: 3.2, color: INK, alpha: .75 });
+  text('V3   2024.12.26', RXr, Y(48), { size: 12, family: 'mono', sp: 1.6, color: INK, alpha: .75, align: 'right' });
+  line(LX, Y(64), RXr, Y(64), { w: 2, color: INK, alpha: .9 });
+
+  // itemised rows
+  const rows = [
+    ['PARAMETERS', '671 B'], ['ACTIVE / TOKEN', '37 B'], ['PRE-TRAIN TOKENS', '14.8 T'],
+    ['H800 GPU · HOURS', '2,788,000'], ['LOSS SPIKES', '0'], ['ROLLBACKS', '0'],
+  ];
+  rows.forEach((r, i) => {
+    const a = P(lt, .18 + i * .13, .42);
+    const yy = Y(124 + i * 46);
+    if (a <= .01) return;
+    text(r[0], LX, yy, { size: 13, family: 'mono', sp: 2.2, color: INK, alpha: .58 * a });
+    g.save(); g.globalAlpha = .26 * a; g.fillStyle = INK;
+    for (let x = LX + 330; x < RXr - 210; x += 7) g.fillRect(x, yy - 5, 2.4, 2.4);
+    g.restore();
+    text(r[1], RXr, yy, { size: 19, family: 'mono', weight: 500, sp: .8, color: INK, alpha: .9 * a, align: 'right' });
+  });
+  line(LX, Y(412), RXr, Y(412), { w: 1.2, color: INK, alpha: .32 });
+
+  // the loss curve, printed on the receipt — the chapter's hero
+  const cp = oQ(P(lt, .55, 2.7));
+  const cx0 = LX, cx1 = RXr, cy0 = Y(690), cyH = 224;
+  // plot frame
+  line(cx0, cy0, cx1, cy0, { w: 1.2, color: INK, alpha: .35 });
+  line(cx0, cy0 - cyH, cx0, cy0, { w: 1.2, color: INK, alpha: .35 });
+  for (let i = 0; i <= 4; i++) {
+    const xg = cx0 + (cx1 - cx0) * i / 4;
+    line(xg, cy0 - cyH, xg, cy0, { w: .8, color: INK, alpha: .1 });
+    if (i) text((i * 25) + '%', xg, cy0 + 20, { size: 9.5, family: 'mono', sp: 1, color: INK, alpha: .35, align: 'center' });
+  }
+  text('TRAINING LOSS · 14.8 T TOKENS', LX, Y(438), { size: 11, family: 'mono', sp: 2.6, color: INK, alpha: .55 });
+  if (cp > 0) {
+    const n = Math.max(2, Math.ceil(cp * (LOSS.length - 1)) + 1);
+    const pts = LOSS.slice(0, n).map(([u, v]) => [cx0 + u * (cx1 - cx0), cy0 - v * cyH]);
+    poly(pts, { w: 2.6, color: INK, alpha: .92 });
+    const last = pts[pts.length - 1];
+    dot(last[0], last[1], 4, SIGNAL, cp * .95);
+    if (cp < .999) spark(last[0], last[1], 1, .55, t);
+  }
+  // the annotation, pointing at the plateau
+  const an = P(lt, 2.4, .6);
+  if (an > 0) {
+    const px = cx0 + .52 * (cx1 - cx0), py = cy0 - LOSS[135][1] * cyH;
+    line(px, py - 10, px, py - 54, { w: 1, color: SIGNAL, alpha: .8 * an });
+    text('没有不可恢复的 spike', px + 10, py - 58, { size: 14, family: 'song', color: SIGNAL, alpha: .95 * an });
+    text('no unrecoverable loss spike', px + 10, py - 38, { size: 10, family: 'mono', sp: 1.6, color: INK, alpha: .45 * an });
+  }
+
+  // total
+  line(LX, Y(752), RXr, Y(752), { w: 2, color: INK, alpha: .9 });
+  const tot = P(lt, 5.4, .6);
+  text('TOTAL TRAINING COST', LX, Y(786), { size: 13, family: 'mono', sp: 2.8, color: INK, alpha: .7 * tot });
+  if (tot > .01) {
+    const e = spring(tot, 1.2);
+    g.save(); g.translate(RXr, Y(930)); g.scale(lerp(1.18, 1, e), lerp(1.18, 1, e));
+    text('$5.576M', 0, 0, { size: 152, family: 'arch', weight: 900, sp: -7, color: INK, alpha: .97 * cl(tot * 2.4), align: 'right' });
+    g.restore();
+    text('2,788,000 GPU·h  ×  $2 / GPU·h', RXr, Y(968), { size: 12.5, family: 'mono', sp: 1.2, color: INK, alpha: .6 * tot, align: 'right' });
+  }
+  // barcode
+  const bc = P(lt, 5.6, .7);
+  if (bc > 0) {
+    const r = mulberry32(4242);
+    for (let x = 0; x < 470; x += 3.6) {
+      box(LX + x, Y(1000), 1 + Math.floor(r() * 3) * 1.6, 34, INK, .78 * bc);
+    }
+    text('V3 · TRAINED ONCE · NO ROLLBACK', LX + 500, Y(1022), { size: 11, family: 'mono', sp: 2, color: INK, alpha: .55 * bc });
+  }
+  g.restore();
+
+  // left margin: the number, run vertically, half off frame — the document bleeds
+  g.save(); g.translate(300, 770); g.rotate(-Math.PI / 2);
+  text('2,788,000 GPU HOURS', 0, 0, { size: 54, family: 'arch', weight: 900, sp: -2, color: INK, alpha: .12 });
+  g.restore();
+  text('03', 96, 150, { size: 150, family: 'arch', weight: 900, sp: -8, color: INK, alpha: .1 });
+  g.save(); g.translate(228, 240); g.rotate(Math.PI / 2);
+  text('COST OF TRAINING', 0, 0, { size: 11, family: 'mono', sp: 4, color: INK, alpha: .35 });
+  g.restore();
+
+  // the stamp, slammed — the last beat of the chapter
+  const st = P(lt, 5.75, .28);
+  if (st > 0) {
+    const e = spring(st, 1.3);
+    g.save();
+    g.translate(1790, 330); g.rotate(-.09); g.scale(lerp(1.5, 1, e), lerp(1.5, 1, e));
+    g.globalAlpha = .9 * cl(st * 2.2);
+    g.strokeStyle = SIGNAL; g.lineWidth = 3.4;
+    g.strokeRect(-118, -46, 236, 92);
+    g.strokeStyle = SIGNAL; g.lineWidth = 1.4;
+    g.strokeRect(-110, -38, 220, 76);
+    text('NO ROLLBACK', 0, 12, { size: 30, family: 'arch', weight: 900, sp: -1, color: SIGNAL, align: 'center' });
+    g.restore();
+    text('V3 训练全程未回滚', 1790, 404, { size: 13, family: 'song', color: INK, alpha: .55 * cl(st * 2), align: 'center' });
+  }
+  hud(t, cl(P(lt, .4, .6)) * (1 - P(lt, 6.6, .5)), true);
+}
+
+/* ============================================================================
+   04 · SHOCK — the scope
+   ========================================================================== */
+const TRACE = (() => {
+  const pts = [], N = 170;
+  for (let i = 0; i <= N; i++) {
+    const u = i / N;
+    let v = .74 - .46 * Math.pow(u, 1.35) + .014 * Math.sin(u * 31) * (1 - u * .4) + .007 * Math.sin(u * 83);
+    if (u > .93) v = lerp(v, 1.72, iQ(cl((u - .93) / .04)));
+    pts.push([u, v]);
+  }
+  return pts;
+})();
+function scopeGrid(a) {
+  if (a <= .01) return;
+  for (let i = 0; i <= 20; i++) {
+    const x = i * (W / 20);
+    line(x, 0, x, H, { w: i % 5 === 0 ? 1 : .7, color: BONE, alpha: (i % 5 === 0 ? .1 : .045) * a });
+  }
+  for (let j = 0; j <= 10; j++) {
+    const y = j * (H / 10);
+    line(0, y, W, y, { w: j % 5 === 0 ? 1 : .7, color: BONE, alpha: (j % 5 === 0 ? .1 : .045) * a });
+  }
+  // reticle
+  line(W / 2 - 18, H / 2, W / 2 + 18, H / 2, { w: 1, color: SIGNAL, alpha: .28 * a });
+  line(W / 2, H / 2 - 18, W / 2, H / 2 + 18, { w: 1, color: SIGNAL, alpha: .28 * a });
+}
+function s4a(t, lt) {
+  box(0, 0, W, H, INK);
+  scopeGrid(cl(P(lt, 0, .5)));
+  // the trace: thick, glowing, drawn up to the beam. The cut lands with a cell already lit.
+  const prog = oQ(P(lt, .02, 1.85));
+  const bx = lerp(W * .18, W + 60, prog);
+  const draw = (wm, al) => {
+    const pts = [];
+    for (const [u, v] of TRACE) {
+      const x = u * W + 40;
+      if (x > bx) break;
+      pts.push([x, v * H * .52 + 20]);
+    }
+    if (pts.length > 1) poly(pts, { w: 3.4 * wm, color: SIGNAL, alpha: al });
+  };
+  g.save(); g.shadowColor = 'rgba(255,77,18,.9)'; g.shadowBlur = 34; draw(2.2, .3); g.restore();
+  draw(1, .96);
+  const [u, v] = TRACE[Math.min(TRACE.length - 1, Math.floor(prog * 169))];
+  spark(u * W + 40, v * H * .52 + 20, 1, 1.2, t);
+  text('NVDA · DAILY', 96, 78, { size: 12, family: 'mono', sp: 3.4, color: GRAY, alpha: .8 * P(lt, .02, .4) });
+  text('2024.11 — 2025.01', 96, 100, { size: 12, family: 'mono', sp: 2, color: GRAY, alpha: .6 * P(lt, .1, .4) });
+  hud(t, 1 - P(lt, 2.1, .3));
+}
+function s4b(t, lt) {
+  box(0, 0, W, H, INK);
+  scopeGrid(.8);
+  // the trace has fallen out of the tube; only the plunge remains
+  poly([[W * .55, 0], [W * .62, H * .3], [W * .68, H + 40]], { w: 3.4, color: SIGNAL, alpha: .85 });
+  g.save(); g.shadowColor = 'rgba(255,77,18,.9)'; g.shadowBlur = 40;
+  poly([[W * .55, 0], [W * .62, H * .3], [W * .68, H + 40]], { w: 6, color: SIGNAL, alpha: .3 });
+  g.restore();
+
+  const sp = P(lt, .02, .3);
+  if (sp > 0) {
+    const e = spring(sp, 1.45), a = cl(sp * 3.4) * (1 - P(lt, .58, .2));
+    const split = (1 - P(lt, .3, .25)) * 20;
+    g.save(); g.translate(W / 2, H / 2 + 30); g.scale(lerp(1.24, 1, e), lerp(1.24, 1, e));
+    text('−17.0%', split, 0, { size: 300, family: 'arch', weight: 900, sp: -16, color: '#FF2E00', alpha: a * .5, align: 'center' });
+    text('−17.0%', -split, 0, { size: 300, family: 'arch', weight: 900, sp: -16, color: '#FFD6AC', alpha: a * .45, align: 'center' });
+    text('−17.0%', 0, 0, { size: 300, family: 'arch', weight: 900, sp: -16, color: '#FFF2E6', alpha: a, align: 'center' });
+    g.restore();
+  }
+  const sc = P(lt, .34, .4);
+  text('2025.01.27 · 单日市值蒸发 −$589B', W / 2, H - 108, { size: 18, family: 'mono', sp: 2, color: SIGNAL, alpha: .85 * sc, align: 'center' });
+  hud(t, 0);
+}
+function s4c(t, lt) {
+  // the silence: the tube is dead, one bone hairline, one blinking cursor
+  box(0, 0, W, H, INK);
+  const lp = oC(P(lt, 0, .5));
+  line(96, H * .5, 96 + 1856 * lp, H * .5, { w: 2, color: BONE, alpha: .85 });
+  line(96, H * .5 - 12, 96, H * .5 + 12, { w: 1.8, color: BONE, alpha: .8 });
+  line(W - 96, H * .5 - 12, W - 96, H * .5 + 12, { w: 1.8, color: BONE, alpha: .5 });
+  const bl = (Math.floor(lt * 2.4) % 2 === 0) ? 1 : .1;
+  dot(96, H * .5, 5, SIGNAL, .95 * bl);
+  text('2025.01.20', W - 96, H * .5 - 30, { size: 14, family: 'mono', sp: 3, color: GRAY, alpha: .6, align: 'right' });
+  hud(t, 0);
+}
+function s4d(t, lt) {
+  box(0, 0, W, H, INK);
+  const y = 300;
+  line(96, y, 96 + 1856 * oC(P(lt, 0, .5)), y, { w: 1.6, color: BONE, alpha: .5 });
+  const a1 = P(lt, .15, .45);
+  slam('R1', 96, 660, { size: 330, family: 'arch', weight: 900, sp: -18, color: BONE, alpha: .98 }, a1, 1.1);
+  text('2025.01.20', 96 + measure('R1', { size: 330, family: 'arch', weight: 900, sp: -18 }) + 30, 560,
+    { size: 24, family: 'mono', sp: 3.2, color: SIGNAL, alpha: .92 * P(lt, .2, .5) });
+
+  const a2 = P(lt, .45, .5);
+  rise('MIT 许可 · 权重全部开放', 100, 242, { size: 30, family: 'song', color: BONE, alpha: .95 }, a2);
+  const a3 = P(lt, 1.0, .5);
+  rise('App Store 免费榜第一 · 美国与 51 国', 100, 190, { size: 30, family: 'song', color: BONE, alpha: .95 }, a3);
+
+  // the results, right — a column of numbers, so the frame is not half empty
+  const ra = P(lt, 1.15, .7);
+  if (ra > 0) {
+    const cx = 1180;
+    text('基准测试', cx, 242, { size: 12, family: 'mono', sp: 3, color: GRAY, alpha: .8 * ra });
+    line(cx, 260, 1900, 260, { w: 1, color: BONE, alpha: .2 * ra });
+    const res = [['AIME 2024', '79.8', '%'], ['MATH-500', '97.3', '%'],
+                 ['Codeforces', '96.3', '%ile'], ['MMLU', '90.8', '%']];
+    for (let i = 0; i < 4; i++) {
+      const a = P(lt, 1.25 + i * .1, .45);
+      const yy = 320 + i * 62;
+      text(res[i][0], cx, yy, { size: 16, family: 'mono', sp: 1.4, color: BONE, alpha: .7 * a });
+      text(res[i][1], 1810, yy, { size: 40, family: 'arch', weight: 900, sp: -1.5, color: i === 0 ? SIGNAL : BONE, alpha: .95 * a, align: 'right' });
+      text(res[i][2], 1900, yy, { size: 12, family: 'mono', sp: 1, color: GRAY, alpha: .7 * a, align: 'right' });
+      line(cx, yy + 22, 1900, yy + 22, { w: .8, color: BONE, alpha: .1 * a });
+    }
+    text('671B 总参数 / 37B 激活 · 纯 RL 训练', cx, 604, { size: 14, family: 'song', color: GRAY, alpha: .8 * P(lt, 1.6, .5) });
+  }
+
+  const a4 = P(lt, 1.9, .5);
+  text('外界第一次意识到：这件事可以这么便宜。', 100, 736, { size: 20, family: 'song', color: GRAY, alpha: .95 * a4 });
+  hud(t, 1 - P(lt, 2.5, .3));
+}
+function s4e(t, lt) {
+  box(0, 0, W, H, INK);
+  // the day itself: one number, and the fall beside it
+  const a1 = P(lt, .05, .5);
+  slam('−$589B', 100, 396, { size: 172, family: 'arch', weight: 900, sp: -8, color: SIGNAL, alpha: .98 }, a1, 1.14);
+  const a2 = P(lt, .4, .5);
+  text('单日市值蒸发 · 史上最大', 104, 462, { size: 26, family: 'song', color: BONE, alpha: .92 * a2 });
+  const a3 = P(lt, .7, .5);
+  text('NVDA · 2025.01.27 · 收盘 −17.0%', 104, 516, { size: 14, family: 'mono', sp: 2.6, color: GRAY, alpha: .85 * a3 });
+
+  // the price chart: climbs all month, then falls off the page
+  const a4 = P(lt, .15, 1.0);
+  if (a4 > 0) {
+    const x0 = 880, x1 = 1952, yTop = 190, yBot = 720;
+    const Hh = yBot - yTop;
+    line(x0, yBot, x1, yBot, { w: 1.2, color: BONE, alpha: .22 * a4 });
+    line(x0, yTop, x0, yBot, { w: 1.2, color: BONE, alpha: .22 * a4 });
+    // month grid
+    for (let i = 1; i < 6; i++) {
+      const yg = yTop + Hh * i / 6;
+      line(x0, yg, x1, yg, { w: .7, color: BONE, alpha: .07 * a4 });
+    }
+    const price = u => {          // 1 = high, 0 = low; u along time
+      let v = .18 + .62 * Math.pow(u, .8) + .03 * Math.sin(u * 26) * (1 - u * .3);
+      if (u > .86) v -= 1.9 * Math.pow((u - .86) / .14, 1.4);   // the cliff, off the bottom
+      return v;
+    };
+    const drawTo = a4;
+    const pts = [];
+    for (let i = 0; i <= 60; i++) {
+      const u = (i / 60) * cl(drawTo * 1.02, 0, 1);
+      if (u > drawTo) break;
+      pts.push([x0 + u * (x1 - x0 - 20), yBot - cl(price(u), -.35, 1.2) * Hh * .74]);
+    }
+    if (pts.length > 2) {
+      // the area under the trace, faint
+      const area = [...pts, [pts[pts.length - 1][0], yBot], [pts[0][0], yBot]];
+      fillPoly(area, BONE, .05 * a4);
+      poly(pts, { w: 3, color: BONE, alpha: .85 * a4 });
+      const last = pts[pts.length - 1];
+      dot(last[0], last[1], 4.5, SIGNAL, a4);
+      if (drawTo < .999) spark(last[0], last[1], .9, .6, t);
+    }
+    // the peak marker
+    const pk = P(lt, .95, .5);
+    if (pk > 0) {
+      const px = x0 + .855 * (x1 - x0 - 20), py = yBot - price(.855) * Hh * .74;
+      line(px, py - 12, px, py - 76, { w: 1, color: SIGNAL, alpha: .8 * pk });
+      text('历史最高', px + 10, py - 80, { size: 14, family: 'song', color: SIGNAL, alpha: .95 * pk });
+      text('$153', px + 10, py - 60, { size: 11, family: 'mono', sp: 1.2, color: BONE, alpha: .6 * pk });
+    }
+    text('2025.01.02', x0, yBot + 26, { size: 11, family: 'mono', sp: 1.6, color: GRAY, alpha: .7 * a4 });
+    text('01.27', x1 - 10, yBot + 26, { size: 11, family: 'mono', sp: 1.6, color: SIGNAL, alpha: .85 * a4, align: 'right' });
+  }
+  hud(t, 1 - P(lt, 2.6, .3));
+}
+
+/* ============================================================================
+   05 · SPARSITY — the cloth
+   ========================================================================== */
+const CLOTH_FULL = offscreen(W, H, (cx) => {
+  // a fine twill: short strokes at 45°, but with visible rows and a slub —
+  // cloth reads through irregularity, not through density alone
+  const step = 7, len = 11;
+  for (let y = -step; y < H + step; y += step) {
+    const rowJit = Math.sin(y * .021) * 3.4;
+    for (let x = -step; x < W + step; x += step) {
+      const i = Math.round(x / step), j = Math.round(y / step);
+      const dir = ((i + 2 * j) % 4 < 2) ? 1 : -1;
+      const slub = ((i * 7 + j * 13) % 17 === 0) ? .3 : 0;
+      const warp = ((j % 5 === 0) ? .26 : .1) + slub;
+      cx.strokeStyle = `rgba(239,234,225,${warp})`;
+      cx.lineWidth = (j % 5 === 0) ? 1.5 : 1.0;
+      const xo = x + rowJit;
+      cx.beginPath();
+      cx.moveTo(xo - len / 2 * dir, y - len / 2);
+      cx.lineTo(xo + len / 2 * dir, y + len / 2);
+      cx.stroke();
+    }
+  }
+  // broad diagonal sheen, the way light lies on cloth
+  for (const [x, w, a] of [[-260, 520, .07], [540, 320, .04], [1260, 560, .08], [1900, 360, .05]]) {
+    const gr = cx.createLinearGradient(x, 0, x + w, H);
+    gr.addColorStop(0, 'rgba(239,234,225,0)');
+    gr.addColorStop(.5, `rgba(239,234,225,${a})`);
+    gr.addColorStop(1, 'rgba(239,234,225,0)');
+    cx.save(); cx.globalCompositeOperation = 'lighter';
+    cx.fillStyle = gr; cx.fillRect(0, 0, W, H); cx.restore();
+  }
+});
+const CLOTH_SPARSE = offscreen(W, H, (cx) => {
+  // the causal diagonal, woven from the surviving threads of the original cloth
+  const r = mulberry32(515);
+  for (let u = 0; u <= 1; u += .0025) {
+    const x = u * W;
+    const yc = -80 + u * (H + 160);
+    for (const [off, a, lw] of [[0, .95, 2.8], [-22, .34, 1.4], [22, .34, 1.4], [-46, .14, 1], [46, .14, 1]]) {
+      const yy = yc + off;
+      if (yy < -10 || yy > H + 10) continue;
+      cx.strokeStyle = `rgba(239,234,225,${a})`;
+      cx.lineWidth = lw;
+      cx.beginPath(); cx.moveTo(x, yy); cx.lineTo(x + 5, yy + 2.4); cx.stroke();
+    }
+  }
+  // loose threads left hanging off the diagonal: the cloth was pulled apart, not deleted
+  for (let i = 0; i < 260; i++) {
+    const u = r();
+    const x = u * W;
+    const yc = -80 + u * (H + 160);
+    const side = r() < .5 ? -1 : 1;
+    const len = 40 + r() * 210;
+    const a = .05 + r() * .14;
+    const yy0 = yc + side * (60 + r() * 30);
+    const yy1 = yy0 + side * len;
+    if (yy0 < -20 || yy0 > H + 20 || yy1 < -20 || yy1 > H + 20) continue;
+    // threads follow the weave: they leave at the twill angle and sag as they hang
+    cx.strokeStyle = `rgba(239,234,225,${a})`;
+    cx.lineWidth = .8 + r();
+    const dx = (side > 0 ? .45 : -.45) * len;
+    cx.beginPath();
+    cx.moveTo(x, yy0);
+    cx.quadraticCurveTo(x + dx * .35, (yy0 + yy1) / 2, x + dx, yy1);
+    cx.stroke();
+  }
+  // and a few whole threads still crossing the frame, barely there
+  for (let j = 0; j < 7; j++) {
+    const y = 30 + j * 128;
+    cx.strokeStyle = 'rgba(239,234,225,.055)'; cx.lineWidth = 1.2;
+    cx.beginPath();
+    for (let x = 0; x <= W; x += 24) {
+      const yy = y + Math.sin(x * .012 + j) * 6;
+      x === 0 ? cx.moveTo(x, yy) : cx.lineTo(x, yy);
+    }
+    cx.stroke();
+  }
+});
+function scSparse(t, lt) {
+  // This chapter is cut into three shots; the weave's own timeline must not restart
+  // at a cut, so it reads the chapter clock, not the shot clock.
+  const ct = t - 28.8;
+  box(0, 0, W, H, INK);
+  // The chapter's three states hand over on the sound cues, not on the shot cuts:
+  // whole cloth while the frame is held (28.8–30.6), the unpicking cue at 30.6 starts the
+  // threads coming apart across the 5b cut, the bare causal band holds through 5b, and the
+  // dot matrix is already formed when 5c cuts in at 33.6.
+  const spr = ct < 1.8 ? 0
+    : ct < 2.9 ? lerp(0, .34, (ct - 1.8) / 1.1)     // the weave is unpicked
+    : ct < 3.3 ? lerp(.34, .50, (ct - 2.9) / .4)    // threads let go
+    : ct < 4.5 ? lerp(.50, .61, (ct - 3.3) / 1.2)   // the bare causal band
+    : lerp(.61, 1, cl((ct - 4.5) / .25));           // matrix, up on the 5c cut
+  const reveal = oC(P(ct, .02, .9));
+
+  // (1) the cloth, whole — a warm ground under the weave so it reads as cloth, not as noise
+  if (spr < .34) {
+    const a = 1 - P(spr, .05, .29);
+    const bg = g.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, `rgba(26,23,17,${a})`); bg.addColorStop(.55, `rgba(19,17,13,${a})`); bg.addColorStop(1, `rgba(11,10,8,${a})`);
+    g.save(); g.fillStyle = bg; g.fillRect(0, 0, W, H); g.restore();
+    g.save(); g.globalAlpha = a * .62;
+    g.beginPath(); g.rect(0, 0, W, H * (.68 + .38 * reveal)); g.clip();
+    g.globalCompositeOperation = 'lighter';
+    g.drawImage(CLOTH_FULL, 0, 0);
+    g.restore();
+  }
+  // (2) the pulled-apart weave: the same cloth, cut down to its causal diagonal
+  else if (spr < .62) {
+    const b = oC(P(spr, .34, .2));
+    g.save(); g.beginPath(); g.rect(0, 0, W, H * (.68 + .38 * reveal)); g.clip();
+    g.globalAlpha = .28 * (1 - b);
+    g.globalCompositeOperation = 'lighter';
+    g.drawImage(CLOTH_FULL, 0, 0); g.restore();
+    box(0, 0, W, H, INK, .55 + .3 * b);
+    g.save(); g.globalAlpha = b; g.drawImage(CLOTH_SPARSE, 0, 0); g.restore();
+  }
+  // (3) the matrix diagram: what the sparse weave actually saves
+  else {
+    const c = oC(P(spr, .62, .26));
+    // the cloth leaves completely — a half-lit weave under a dot matrix reads as scratches
+    if (c < .995) {
+      g.save(); g.globalAlpha = 1 - c; g.drawImage(CLOTH_SPARSE, 0, 0); g.restore();
+    }
+    box(0, 0, W, H, INK, .5 + .5 * c);
+  }
+  const sp = P(spr, .62, .3);   // used below for the diagram
+
+  // header scrim: a soft dark wash so the type reads over the weave
+  const hs = g.createLinearGradient(0, 0, 0, 220);
+  hs.addColorStop(0, 'rgba(8,9,10,.96)'); hs.addColorStop(.7, 'rgba(8,9,10,.78)'); hs.addColorStop(1, 'rgba(8,9,10,0)');
+  g.save(); g.fillStyle = hs; g.fillRect(0, 0, W, 220); g.restore();
+
+  text('2025.09.29 → 12.01   V3.2', 96, 82, { size: 12, family: 'mono', sp: 3, color: SIGNAL, alpha: .85 });
+  text('DSA · 细粒度稀疏注意力', 96, 144, { size: 40, family: 'song', color: BONE, alpha: .96 });
+
+  // phase 1 labels: the weave as the attention matrix, and what is wrong with it
+  const w0 = P(ct, .25, .7);
+  if (w0 > 0 && spr < .4) {
+    const a = w0 * (1 - P(spr, .3, .1));
+    text('每一根经线，都要和每一根纬线相交一次', 96, 740, { size: 26, family: 'song', color: BONE, alpha: .92 * a });
+    text('这是注意力的全连接：token 数翻倍，织的次数翻四倍', 96, 782, { size: 15, family: 'mono', sp: 1, color: GRAY, alpha: .85 * a });
+    // leaders into the cloth
+    for (let i = 0; i < 3; i++) {
+      const x = 320 + i * 420, y = 640;
+      line(x, y, x, y - 90 - i * 30, { w: 1, color: SIGNAL, alpha: .35 * a });
+      dot(x, y - 90 - i * 30, 2.4, SIGNAL, .7 * a);
+    }
+  }
+
+  // phase 2 labels: the threads come apart, and the reason is stated while they do
+  const w1 = P(ct, 2.05, .55) * cl(1 - P(spr, .60, .12));
+  if (w1 > 0) {
+    const yy = 556;
+    text('抽掉不必要的交叉', 96, yy, { size: 40, family: 'song', color: BONE, alpha: .96 * w1 });
+    text('每个 token 只和它前面最近的 k 个相交，其余的线不必织', 96, yy + 44,
+      { size: 16, family: 'mono', sp: .8, color: GRAY, alpha: .9 * w1 });
+  }
+
+  // --- phase 3 only: the matrix diagram, medals, the formula that lands
+  if (sp > .05) {
+    const dm = oC(cl((sp - .05) / .5));
+    const gx = 96, gy = 232, gw = W - 192, gh = H - 330;
+    const NC = 64, NR = 26;
+    for (let i = 0; i < NC; i++) {
+      for (let j = 0; j < NR; j++) {
+        const u = i / (NC - 1), v = j / (NR - 1);
+        const onBand = Math.abs(u - v) < .085;
+        const x = gx + u * gw, y = gy + v * gh;
+        if (onBand) dot(x, y, 2.4, SIGNAL, .55 * dm);
+        else dot(x, y, 1.2, BONE, .07 * dm);
+      }
+    }
+    // the shape the matrix used to have
+    g.save();
+    g.setLineDash([5, 9]); g.strokeStyle = BONE; g.globalAlpha = .16 * dm; g.lineWidth = 1;
+    g.strokeRect(gx, gy, gw, gh); g.restore();
+    text('全部 token 对 · L × L', gx, gy - 16, { size: 11, family: 'mono', sp: 2.4, color: GRAY, alpha: .8 * dm });
+    text('只算因果带 · 1 / 16', gx + gw, gy - 16, { size: 11, family: 'mono', sp: 2.4, color: SIGNAL, alpha: .85 * dm, align: 'right' });
+    // a bracket on the surviving band
+    const bx0 = gx + .12 * gw, bx1 = gx + .98 * gw;
+    line(bx0, gy + gh + 22, bx1, gy + gh + 22, { w: 1.2, color: SIGNAL, alpha: .5 * dm });
+    line(bx0, gy + gh + 14, bx0, gy + gh + 30, { w: 1.2, color: SIGNAL, alpha: .5 * dm });
+    line(bx1, gy + gh + 14, bx1, gy + gh + 30, { w: 1.2, color: SIGNAL, alpha: .5 * dm });
+  }
+
+  // formula: O(L²) holds the frame until the weave is cut, then O(L·k) replaces it
+  const f0 = cl(1 - P(spr, .3, .18));
+  if (f0 > .01) {
+    text('O(L²)', 1470, 806, { size: 86, family: 'arch', weight: 700, sp: -3, color: BONE, alpha: .62 * f0 });
+    text('每个 token 要看过全部 token', 1470, 840, { size: 14, family: 'song', color: GRAY, alpha: .8 * f0 });
+  }
+  if (sp > .12) {
+    const f1 = oC(P(sp, .12, .35));
+    const fp = g.createLinearGradient(1150, 0, 1952, 0);
+    fp.addColorStop(0, 'rgba(8,9,10,0)'); fp.addColorStop(.42, 'rgba(8,9,10,.9)'); fp.addColorStop(1, 'rgba(8,9,10,.94)');
+    g.save(); g.fillStyle = fp; g.fillRect(1150, 700, W - 1150, 158); g.restore();
+    text('O(L·k)', 1470, 806, { size: 104, family: 'arch', weight: 700, sp: -3, color: SIGNAL, alpha: .98 * f1 });
+    line(1466, 822, 1466 + 320 * f1, 822, { w: 4, color: SIGNAL, alpha: .9 * f1 });
+    text('k ≪ L', 1822, 804, { size: 20, family: 'mono', sp: 2.4, color: BONE, alpha: .85 * f1 });
+  }
+
+  // the four golds, on their own band so they read as a caption, not as furniture
+  const medals = ['IMO', 'CMO', 'ICPC · WF', 'IOI'];
+  const mh = P(ct, E.medals[0] - 28.8 - .35, .4);
+  if (mh > .01) {
+    const ms = g.createLinearGradient(0, 640, 0, 858);
+    ms.addColorStop(0, 'rgba(8,9,10,0)'); ms.addColorStop(.4, 'rgba(8,9,10,.94)'); ms.addColorStop(1, 'rgba(8,9,10,.99)');
+    g.save(); g.fillStyle = ms; g.fillRect(0, 640, 1120, 218); g.restore();
+  }
+  text('V3.2-SPECIALE · 四金', 96, 686, { size: 13, family: 'mono', sp: 3, color: GRAY, alpha: .9 * mh });
+  for (let i = 0; i < 4; i++) {
+    const a = P(ct, E.medals[i] - 28.8 - .25, .4);
+    if (a <= .01) continue;
+    const x = 96 + i * 196, yy = 748, e = spring(a, 1.1);
+    g.save(); g.translate(x + 24, yy - 34); g.scale(e, e); g.rotate(-.05);
+    box(-24, -24, 48, 48, SIGNAL, .95 * cl(a * 2.4));
+    text('金', 0, 10, { size: 24, family: 'song', color: INK, alpha: .96, align: 'center' });
+    g.restore();
+    text(medals[i], x + 62, yy - 26, { size: 14, family: 'mono', sp: 1.4, color: BONE, alpha: .92 * a });
+  }
+
+  // API −50%: a hard plate, so it never collides with the diagram's own labels
+  const aA = P(ct, E.api50 - 28.8, .5);
+  if (aA > 0) {
+    const ap = g.createLinearGradient(0, 0, 900, 0);
+    ap.addColorStop(0, 'rgba(8,9,10,0)'); ap.addColorStop(.35, 'rgba(8,9,10,.88)'); ap.addColorStop(1, 'rgba(8,9,10,.96)');
+    g.save(); g.fillStyle = ap; g.fillRect(W - 900, 0, 900, 300); g.restore();
+    slam('−50%', W - 132, 226, { size: 128, family: 'arch', weight: 900, sp: -6, color: SIGNAL, alpha: .98, align: 'right' }, aA, 1.14);
+    text('V3.2 API 价格再降一半', W - 132, 268, { size: 16, family: 'song', color: BONE, alpha: .85 * aA, align: 'right' });
+  }
+  hud(t, 1 - P(ct, 6.4, .4));
+}
+
+/* ============================================================================
+   06 · CONTEXT — the odometer, then the ruler tunnel
+   ========================================================================== */
+function drum(cx, cy, w, h, pos, o = {}) {
+  const { on = BONE, off = GRAY, alpha = 1 } = o;
+  const dg = h * .82, fs = h * .62;
+  // an odometer wheel only ever shows ~1.6 digits: the outgoing one is already
+  // sliding out of the window. Showing a whole row of ghosts reads as a smear.
+  g.save();
+  g.beginPath(); g.rect(cx - w / 2, cy - h / 2, w, h); g.clip();
+  // a soft mask so the digits fade at the window's edges
+  const base = Math.floor(pos), frac = pos - base;
+  const idx = frac < .5 ? 0 : 1;
+  for (let i = idx - 1; i <= idx + 1; i++) {
+    const d = ((base + i) % 10 + 10) % 10;
+    const off2 = (i - frac) * dg;
+    if (Math.abs(off2) > h * .95) continue;
+    const dist = Math.abs(off2) / dg;
+    const a = alpha * cl(1 - dist * .9);
+    if (a <= .02) continue;
+    text(String(d), cx, cy + off2 + fs * .36, { size: fs, family: 'arch', weight: 900, sp: 0, color: dist < .5 ? on : off, alpha: a, align: 'center' });
+  }
+  const sg = g.createLinearGradient(0, cy - h / 2, 0, cy + h / 2);
+  sg.addColorStop(0, 'rgba(8,9,10,.95)'); sg.addColorStop(.2, 'rgba(8,9,10,0)');
+  sg.addColorStop(.8, 'rgba(8,9,10,0)'); sg.addColorStop(1, 'rgba(8,9,10,.95)');
+  g.fillStyle = sg; g.fillRect(cx - w / 2, cy - h / 2, w, h);
+  g.restore();
+}
+function s6a(t, lt) {
+  box(0, 0, W, H, INK);
+  // the wheel runs hard, then brakes and locks on 1,000,000 well before the cut
+  const p = P(lt, .05, 1.35);
+  const val = 1000000 * oQ(p);
+
+  const n = 7, dw = 218, x0 = W / 2 - dw * (n - 1) / 2;
+  const winW = dw - 10, winH = 210;
+  // the housing
+  box(x0 - dw / 2 - 26, 470 - winH / 2 - 26, dw * n + 52, winH + 52, '#141518', 1);
+  line(x0 - dw / 2 - 26, 470 - winH / 2 - 26, x0 + dw * (n - 1) + dw / 2 + 26, 470 - winH / 2 - 26, { w: 2, color: BONE, alpha: .4 });
+  line(x0 - dw / 2 - 26, 470 + winH / 2 + 26, x0 + dw * (n - 1) + dw / 2 + 26, 470 + winH / 2 + 26, { w: 2, color: BONE, alpha: .4 });
+
+  for (let i = 0; i < n; i++) {
+    const k = n - 1 - i;
+    const scale = Math.pow(10, k);
+    const pos = (val / scale) % 10;
+    const cx = x0 + i * dw;
+    drum(cx, 470, winW, winH, pos, { on: i === 0 ? SIGNAL : BONE, off: '#4A4844' });
+    line(cx - dw / 2, 470 - winH / 2, cx - dw / 2, 470 + winH / 2, { w: 1, color: BONE, alpha: .1 });
+    if (k === 3) text(',', cx - dw / 2 - 12, 470 + 40, { size: 96, family: 'arch', weight: 900, color: BONE, alpha: .6, align: 'center' });
+  }
+  line(x0 + dw * (n - 1) + dw / 2, 470 - winH / 2, x0 + dw * (n - 1) + dw / 2, 470 + winH / 2, { w: 1, color: BONE, alpha: .1 });
+
+  text('2026.04.24 · V4 PREVIEW', 96, 96, { size: 13, family: 'mono', sp: 3, color: SIGNAL, alpha: .85 });
+  text('上下文长度', 96, 250, { size: 20, family: 'song', color: BONE, alpha: .9 });
+  text('TOKENS', 1952, 250, { size: 13, family: 'mono', sp: 4, color: GRAY, alpha: .8, align: 'right' });
+  // what the number means, physically
+  const cap = P(lt, .95, .6);
+  if (cap > 0) {
+    text('≈ 600 万个汉字。一部《三体》三部曲，约 90 万字。', 96, 660,
+      { size: 19, family: 'song', color: BONE, alpha: .9 * cap });
+    text('一次性放进去，不用切、不用摘要、不用记住前面说过什么。', 96, 698,
+      { size: 17, family: 'song', color: GRAY, alpha: .85 * cap });
+  }
+  text('Pro 1.6T / 49B 激活', 1952, 700, { size: 20, family: 'sans', color: BONE, alpha: .85 * P(lt, 1.0, .5), align: 'right' });
+  text('Flash 284B / 13B 激活', 1952, 736, { size: 20, family: 'sans', color: GRAY, alpha: .85 * P(lt, 1.2, .5), align: 'right' });
+  hud(t, 1 - P(lt, 2.1, .3));
+}
+function s6b(t, lt) {
+  // a steel rule pulled out of its case. Everything past 128K is new territory.
+  box(0, 0, W, H, INK);
+  const pull = oQ(P(lt, .05, 1.45));
+  const x0 = 232, LEN = 1180, y = 452, H2 = 104;
+  const xk = x0 + .128 * LEN;
+
+  // the case
+  const cw = 148;
+  box(x0 - cw - 14, y - H2 - 30, cw, H2 * 2 + 60, '#17181B', 1);
+  line(x0 - cw - 14, y - H2 - 30, x0 - 14, y - H2 - 30, { w: 2, color: BONE, alpha: .45 });
+  line(x0 - cw - 14, y + H2 + 30, x0 - 14, y + H2 + 30, { w: 2, color: BONE, alpha: .45 });
+  ring(x0 - cw / 2 - 14, y, 40, { w: 2, color: BONE, alpha: .3 });
+  ring(x0 - cw / 2 - 14, y, 11, { w: 2, color: SIGNAL, alpha: .85 });
+  text('1M', x0 - cw / 2 - 14, y + 62, { size: 15, family: 'mono', sp: 3, color: GRAY, alpha: .75, align: 'center' });
+
+  const L = LEN * pull;
+  // the blade, and the strip of new territory
+  box(x0, y - H2, L, H2 * 2, BONE, .94);
+  if (L > .128 * LEN) {
+    const nx = x0 + .128 * LEN;
+    box(nx, y + H2 - 26, L - (nx - x0), 26, SIGNAL, .9);
+  }
+  // the comb: a fine rule — ticks rise from the bottom edge, tall ones every 10th
+  for (let x = 0; x < L; x += 6) {
+    const odd = (x / 6) % 10 < 1;
+    const h = odd ? H2 * .62 : H2 * .26;
+    box(x0 + x, y + H2 - h - 30, 1.8, h, INK, odd ? .82 : .34);
+  }
+  // a second, finer comb along the top edge, only where it is new ground
+  if (L > .128 * LEN) {
+    for (let x = .128 * LEN; x < L; x += 6) {
+      box(x0 + x, y - H2 + 4, 1.8, H2 * .16, INK, .3);
+    }
+  }
+  // the numbers engraved on the blade, up out of the comb
+  for (const [f, lab] of [[.128, '128K'], [.28, '280K'], [.52, '520K'], [.82, '820K']]) {
+    const x = x0 + f * LEN;
+    if (x > x0 + L + 6) continue;
+    const a = cl((x0 + L - x) / 70);
+    text(lab, x, y - 12, { size: 34, family: 'arch', weight: 700, sp: -1.4, color: INK, alpha: .92 * a, align: 'center' });
+  }
+  // the end of the blade, with its reading — this is the number the chapter is about
+  if (pull > .55) {
+    const xe = x0 + L;
+    const a = P(lt, .5, .5);
+    line(xe, y - H2 - 30, xe, y + H2 + 30, { w: 2.4, color: SIGNAL, alpha: .9 * a });
+    text('1,000,000', xe + 24, y - H2 + 34, { size: 62, family: 'arch', weight: 900, sp: -3, color: BONE, alpha: .97 * a });
+    text('TOKENS · 一次上下文', xe + 26, y - H2 + 64, { size: 12.5, family: 'mono', sp: 2.4, color: SIGNAL, alpha: .85 * a });
+    text('≈ 600 万汉字', xe + 26, y - H2 + 100, { size: 16, family: 'song', color: GRAY, alpha: .85 * a });
+  }
+  // the old ceiling, marked
+  const ak = P(lt, .55, .5);
+  if (ak > 0) {
+    line(xk, y - H2 - 34, xk, y + H2 + 16, { w: 3, color: SIGNAL, alpha: .95 * ak });
+    text('128K', xk, y - H2 - 48, { size: 26, family: 'arch', weight: 700, sp: -1, color: SIGNAL, alpha: .95 * ak, align: 'center' });
+    text('上一代的天花板', xk + 4, y + H2 + 52, { size: 14, family: 'song', color: GRAY, alpha: .9 * ak });
+    // the bracket under the new stretch
+    const bx2 = x0 + LEN * pull;
+    line(xk, y + H2 + 84, bx2, y + H2 + 84, { w: 1.2, color: SIGNAL, alpha: .6 * ak });
+    line(xk, y + H2 + 76, xk, y + H2 + 92, { w: 1.2, color: SIGNAL, alpha: .6 * ak });
+    line(bx2, y + H2 + 76, bx2, y + H2 + 92, { w: 1.2, color: SIGNAL, alpha: .6 * ak });
+    text('×7.8  新增的部分', (xk + bx2) / 2, y + H2 + 112, { size: 15, family: 'mono', sp: 2, color: SIGNAL, alpha: .8 * ak, align: 'center' });
+  }
+  if (pull > .9) fillPoly([[x0 + LEN, y - H2], [x0 + LEN, y + H2], [x0 + LEN + 32, y]], BONE, .9);
+
+  const a = P(lt, .15, .6);
+  text('2026.04.24 · V4 PREVIEW · 1M 上下文', 96, 96, { size: 13, family: 'mono', sp: 3, color: SIGNAL, alpha: .85 * a });
+  text('上一代的极限，成了这一代的刻度原点', 96, 152, { size: 30, family: 'song', color: BONE, alpha: .95 * a });
+  hud(t, 1 - P(lt, 1.9, .3));
+}
+function s6c(t, lt) {
+  box(0, 0, W, H, INK);
+  const a = P(lt, .02, .5);
+  const fold = ioC(P(lt, .1, .85));
+
+  // the blade retracts, then folds itself into a cartridge of stacked leaves
+  const n = 9, bx = 940, bw = 940;
+  for (let i = 0; i < n; i++) {
+    const openY = 96 + i * 74, closeY = 292 + i * 50;
+    const yy = lerp(openY, closeY, fold);
+    const hh = lerp(56, 42, fold);
+    const wSeg = lerp(940 + i * 22, bw, fold);
+    const ox = bx + (940 - wSeg) * .5 + i * 4 * (1 - fold);
+    // each leaf: a bone card with an ink comb, tighter as it compresses
+    box(ox, yy, wSeg, hh, BONE, lerp(.9, .66, fold) - i * .02);
+    box(ox, yy + hh - 3, wSeg, 3, INK, .3);
+    const tickN = 34;
+    for (let k = 0; k < tickN; k++) {
+      const tx = ox + 10 + k * (wSeg - 20) / tickN;
+      const major = k % 5 === 0;
+      box(tx, yy + hh - (major ? hh * .62 : hh * .26) - 3, 1.5, major ? hh * .62 : hh * .26, INK, major ? .72 : .34);
+    }
+    // the leaf's index number, left
+    text(String(i + 1).padStart(2, '0'), ox + wSeg - 34, yy + 22, { size: 13, family: 'mono', sp: 1, color: INK, alpha: .4 });
+  }
+  // the cartridge's spine
+  const spineA = P(lt, .5, .4);
+  if (spineA > 0) {
+    box(bx - 16, 292, 9, n * 50 + 8, SIGNAL, .95 * spineA);
+  }
+
+  // 1M, enormous, and what it means
+  const b = P(lt, .4, .6);
+  slam('1M', 96, 690, { size: 280, family: 'arch', weight: 900, sp: -16, color: BONE, alpha: .98 }, b, 1.14);
+  text('token', 100, 736, { size: 30, family: 'mono', sp: 6, color: SIGNAL, alpha: .9 * P(lt, .6, .5) });
+  text('一次装下：三部《三体》全集，或者一份完整代码库', 96, 790,
+    { size: 19, family: 'song', color: GRAY, alpha: .95 * P(lt, .8, .5) });
+  text('TOKEN 级压缩 + DSA', 96, 150, { size: 13, family: 'mono', sp: 3.4, color: SIGNAL, alpha: .85 * a });
+  text('长上下文不是把整段铺开，而是按需要展开', 96, 200, { size: 22, family: 'song', color: BONE, alpha: .7 * a });
+  hud(t, 1 - P(lt, 2.2, .3));
+}
+
+/* ============================================================================
+   07 · ASYMMETRY — inside the corridor
+   ========================================================================== */
+function s7a(t, lt) {
+  box(0, 0, W, H, INK);
+  // inside a duct: two walls converging to a slot on the right, seen in perspective
+  const cy = 452;
+  const push = oC(P(lt, 0, 1.3));
+  const hL = 196 - push * 18, hR = 15 - push * 3;
+  const yTL = cy - hL, yBL = cy + hL, yTR = cy - hR, yBR = cy + hR;
+
+  // the two wall faces
+  const top = [[0, 0], [W, 0], [W, yTR], [0, yTL]];
+  const bot = [[0, yBL], [W, yBR], [W, H], [0, H]];
+  for (const wall of [top, bot]) {
+    g.save();
+    g.beginPath(); g.moveTo(wall[0][0], wall[0][1]);
+    for (const p of wall.slice(1)) g.lineTo(p[0], p[1]);
+    g.closePath(); g.clip();
+    // ribs: they converge toward the vanishing point on the right
+    const N = 22;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      // left edge y, and its converged right edge y
+      const yLL = lerp(yTL, 0, u), yRR = lerp(yTR, 0, u);
+      const yBL2 = lerp(yBL, H, u), yBR2 = lerp(yBR, H, u);
+      const a = .16 * (1 - u * .45);
+      if (wall === top) line(0, yLL, W, yRR, { w: 1.5, color: BONE, alpha: a });
+      else line(0, yBL2, W, yBR2, { w: 1.5, color: BONE, alpha: a });
+    }
+    // longitudinal seams, running into the slot
+    for (let i = 0; i < 7; i++) {
+      const u = i / 6;
+      if (wall === top) {
+        const yA = lerp(0, yTL, u), yB = lerp(0, yTR, u);
+        line(0, yA, W, yB, { w: .9, color: BONE, alpha: .07 });
+      } else {
+        const yA = lerp(H, yBL, u), yB = lerp(H, yBR, u);
+        line(0, yA, W, yB, { w: .9, color: BONE, alpha: .07 });
+      }
+    }
+    // each wall darkens toward the near edge
+    const gr = g.createLinearGradient(0, wall === top ? cy - hL : cy + hL, 0, wall === top ? 0 : H);
+    gr.addColorStop(0, 'rgba(8,9,10,0)'); gr.addColorStop(1, 'rgba(8,9,10,.72)');
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    g.restore();
+  }
+  // the two edge lines of the duct
+  line(0, yTL, W, yTR, { w: 2.6, color: BONE, alpha: .85 });
+  line(0, yBL, W, yBR, { w: 2.6, color: BONE, alpha: .85 });
+
+  // the slot itself, glowing
+  const gl = g.createLinearGradient(0, cy, W, cy);
+  gl.addColorStop(0, 'rgba(255,77,18,0)');
+  gl.addColorStop(.55, `rgba(255,90,30,${.1 + .1 * push})`);
+  gl.addColorStop(1, `rgba(255,120,60,${.55 + .2 * push})`);
+  g.save(); g.fillStyle = gl; g.fillRect(0, yTR, W, Math.max(4, yBR - yTR)); g.restore();
+  const rg = g.createRadialGradient(W - 40, cy, 0, W - 40, cy, 460);
+  rg.addColorStop(0, 'rgba(255,77,18,.34)'); rg.addColorStop(1, 'rgba(255,77,18,0)');
+  g.save(); g.fillStyle = rg; g.fillRect(W - 520, 0, 520, H); g.restore();
+
+  // the token, running the duct toward the light
+  const u = oC(P(lt, .05, 1.2));
+  const sx = lerp(260, W - 90, u);
+  const sc = lerp(1.05, .42, u);
+  spark(sx, cy, 1, sc, t);
+
+  // left scrim so the type has a floor
+  const lg = g.createLinearGradient(0, 0, 760, 0);
+  lg.addColorStop(0, 'rgba(8,9,10,.9)'); lg.addColorStop(.72, 'rgba(8,9,10,.55)'); lg.addColorStop(1, 'rgba(8,9,10,0)');
+  g.save(); g.fillStyle = lg; g.fillRect(0, 0, 760, H); g.restore();
+
+  text('2026.09.10 · V4.1-FLASH', 96, 84, { size: 13, family: 'mono', sp: 3, color: BONE, alpha: .85 });
+  const a1 = P(lt, .18, .5);
+  slam('8B', 92, 470, { size: 150, family: 'arch', weight: 900, sp: -8, color: BONE, alpha: .98 }, a1, 1.12);
+  text('预填充 PREFILL', 100, 516, { size: 15, family: 'mono', sp: 3, color: SIGNAL, alpha: .92 * P(lt, .3, .5) });
+  text('一次看完整段上下文', 100, 560, { size: 21, family: 'song', color: BONE, alpha: .9 * P(lt, .4, .5) });
+  // the duct's width, dimensioned
+  line(72, yTL, 72, yBL, { w: 1, color: SIGNAL, alpha: .5 });
+  line(64, yTL, 80, yTL, { w: 1, color: SIGNAL, alpha: .5 });
+  line(64, yBL, 80, yBL, { w: 1, color: SIGNAL, alpha: .5 });
+  hud(t, 1 - P(lt, 1.0, .25));
+}
+function s7b(t, lt) {
+  box(0, 0, W, H, INK);
+  // two stone masses press shut; a slit of light between them
+  const cy = 430;
+  const gap = lerp(168, 6, ioC(P(lt, .05, 1.0)));
+  const yTop = cy - gap, yBot = cy + gap;
+
+  // solid slabs: near-black mass, with only the rock near the lip catching the glow
+  for (const [y0, dir] of [[yTop, -1], [yBot, 1]]) {
+    const yA = dir < 0 ? 0 : y0, yB = dir < 0 ? y0 : H;
+    box(0, yA, W, yB - yA, '#0b0c0d', 1);
+    const r = mulberry32(dir > 0 ? 77 : 33);
+    // strata: thin lit layers that fade with distance from the slit
+    const N = 90;
+    for (let i = 0; i < N; i++) {
+      const u = i / N;
+      const dy = Math.pow(u, 1.7) * 300;
+      const yy = y0 + dir * dy;
+      if (yy < -10 || yy > H + 10) continue;
+      const lit = Math.pow(1 - u, 2.6);
+      // the layer's surface is uneven: it wanders as it goes
+      const amp = 1.4 + 7 * u;
+      const pts = [];
+      for (let x = 0; x <= W; x += 32) {
+        pts.push([x, yy + Math.sin(x * .006 + i * .9) * amp + (r() - .5) * 1.6]);
+      }
+      poly(pts, { w: .8 + lit * 1.4, color: '#E8DFCC', alpha: (.05 + .5 * lit) * (0.3 + .7 * r()) });
+    }
+    // fractures running into the mass
+    for (let k = 0; k < 16; k++) {
+      const x0 = r() * W;
+      const yy0 = y0 + dir * (4 + r() * 40);
+      let x = x0, y = yy0;
+      const seg = [];
+      for (let s = 0; s < 14; s++) {
+        seg.push([x, y]);
+        x += (r() - .5) * 26;
+        y += dir * (6 + r() * 22);
+        if (y < 0 || y > H) break;
+      }
+      poly(seg, { w: .9, color: '#120f0d', alpha: .55 });
+      poly(seg, { w: .9, color: '#C9BFA9', alpha: .07 });
+    }
+    // chipped edge along the lip
+    for (let x = -10; x < W + 10; x += 18) {
+      const d = 2 + r() * 9;
+      fillPoly([[x, y0], [x + 20, y0], [x + 9 + r() * 4, y0 + dir * d]], '#E4DBC8', .55);
+    }
+    // the lip itself
+    line(0, y0, W, y0, { w: 2.4, color: '#F6F1E6', alpha: .9 });
+  }
+
+  // the slit: light squeezing through
+  const glowA = P(lt, .08, .7);
+  if (glowA > 0) {
+    const gl = g.createLinearGradient(0, yTop - 40, 0, yBot + 40);
+    gl.addColorStop(0, 'rgba(255,77,18,0)');
+    gl.addColorStop(.42, `rgba(255,96,36,${.55 * glowA})`);
+    gl.addColorStop(.5, `rgba(255,170,110,${.8 * glowA})`);
+    gl.addColorStop(.58, `rgba(255,96,36,${.55 * glowA})`);
+    gl.addColorStop(1, 'rgba(255,77,18,0)');
+    g.save(); g.fillStyle = gl; g.fillRect(0, yTop - 40, W, gap * 2 + 80); g.restore();
+  }
+
+  // the token, arriving and squeezing through
+  const sq = oC(P(lt, .08, .92));
+  const sx = lerp(320, W * .5, sq);
+  if (sq < .96) spark(sx, cy, 1, lerp(1.0, .45, sq), t);
+  else dot(sx, cy, 3.2, SIGNAL, 1);
+
+  // type, inside the safe area, on the dark halves
+  text('窄门 · THE GATE', 132, 92, { size: 13, family: 'mono', sp: 3.4, color: SIGNAL, alpha: .9 * P(lt, .08, .35) });
+  text('因果编码器 → 解码器', 132, 146, { size: 26, family: 'song', color: BONE, alpha: .9 * P(lt, .15, .4) });
+
+  const a = P(lt, .35, .55);
+  if (a > 0) {
+    text('8B', 132, 800, { size: 96, family: 'arch', weight: 900, sp: -4, color: BONE, alpha: .95 * a });
+    text('预填充 PREFILL', 140, 834, { size: 13, family: 'mono', sp: 2.6, color: GRAY, alpha: .85 * a });
+    text('16B', W - 132, 800, { size: 96, family: 'arch', weight: 900, sp: -4, color: SIGNAL, alpha: .97 * a, align: 'right' });
+    text('解码 DECODE', W - 132, 834, { size: 13, family: 'mono', sp: 2.6, color: GRAY, alpha: .85 * a, align: 'right' });
+  }
+  // the pinch, dimensioned
+  const dA = P(lt, .5, .5);
+  if (dA > 0) {
+    const x = W * .5 + 150;
+    line(x, yTop, x, yBot, { w: 1.2, color: SIGNAL, alpha: .7 * dA });
+    line(x - 8, yTop, x + 8, yTop, { w: 1.2, color: SIGNAL, alpha: .7 * dA });
+    line(x - 8, yBot, x + 8, yBot, { w: 1.2, color: SIGNAL, alpha: .7 * dA });
+  }
+  hud(t, 0);
+}
+function s7c(t, lt) {
+  box(0, 0, W, H, INK);
+  const open = oQ(P(lt, 0, .55));
+  // the duct walls fly apart
+  const yTop = lerp(H * .5 - 9, -H * .55, open);
+  const yBot = lerp(H * .5 + 9, H * 1.55, open);
+  hatch(0, yTop - 500, W, 500, { ang: 0, gap: 7, color: BONE, alpha: .12 * (1 - open * .8), lw: 2.4 });
+  hatch(0, yBot, W, 500, { ang: 0, gap: 7, color: BONE, alpha: .12 * (1 - open * .8), lw: 2.4 });
+  line(0, yTop, W, yTop, { w: 3, color: BONE, alpha: .9 * (1 - open) });
+  line(0, yBot, W, yBot, { w: 3, color: BONE, alpha: .9 * (1 - open) });
+
+  // the hall: the decoded fan
+  const fan = P(lt, .05, .75);
+  if (fan > 0) {
+    const cx = 180, cy = H * .5;
+    for (let i = 0; i < 34; i++) {
+      const u = i / 33 - .5;
+      const ex = W + 80, ey = cy + u * H * .78;
+      line(cx, cy, cx + (ex - cx) * oC(fan), cy + (ey - cy) * oC(fan), { w: 1, color: SIGNAL, alpha: .22 * fan });
+    }
+    spark(lerp(cx, W - 70, oC(P(lt, .1, 1.3))), cy, .95, 1.1, t);
+  }
+  const a = P(lt, .12, .5);
+  slam('16B', 150, 700, { size: 250, family: 'arch', weight: 900, sp: -12, color: BONE, alpha: .98 }, a, 1.1);
+  text('解码 DECODE · 一次一个 token', 156, 744, { size: 15, family: 'mono', sp: 2.6, color: SIGNAL, alpha: .9 * P(lt, .3, .5) });
+  // the asymmetry, stated
+  const b = P(lt, .5, .6);
+  text('预填充贵，解码长', 150, 260, { size: 30, family: 'song', color: BONE, alpha: .92 * b });
+  text('所以两条路径必须不一样', 150, 300, { size: 16, family: 'mono', sp: 1.4, color: GRAY, alpha: .9 * b });
+  hud(t, 1 - P(lt, 1.6, .3));
+}
+function s7d(t, lt) {
+  box(0, 0, W, H, INK);
+  const a = P(lt, 0, .5);
+  // the chapter's claim, stated once, at the top
+  text('2026.09.10 · V4.1-FLASH · 552B MoE · 原生多模态', 96, 92,
+    { size: 13, family: 'mono', sp: 2.6, color: SIGNAL, alpha: .85 * P(lt, .02, .4) });
+  text('便宜到可以一直开着', 96, 168, { size: 44, family: 'song', color: BONE, alpha: .95 * P(lt, .1, .5) });
+
+  // KV cache, drawn at true ratio in two bars
+  text('KV CACHE 占用', 150, 292, { size: 13, family: 'mono', sp: 3.4, color: GRAY, alpha: .85 * a });
+  const bx = 150, bw = 620;
+  box(bx, 322, bw, 30, BONE, .12 * a);
+  box(bx, 322, bw * lerp(1, .25, oC(P(lt, .05, .8))), 30, SIGNAL, .92 * a);
+  text('HBM  ×1/4', bx + bw + 22, 346, { size: 15, family: 'mono', sp: 1.4, color: BONE, alpha: .85 * a });
+  box(bx, 370, bw, 30, BONE, .12 * a);
+  box(bx, 370, bw * lerp(1, .125, oC(P(lt, .15, .8))), 30, SIGNAL, .72 * a);
+  text('SSD  ×1/8', bx + bw + 22, 394, { size: 15, family: 'mono', sp: 1.4, color: GRAY, alpha: .8 * a });
+
+  // the price, huge, right
+  const pA = P(lt, .5, .6);
+  if (pA > 0) {
+    slam('¥0.02', W - 130, 640, { size: 150, family: 'arch', weight: 900, sp: -7, color: SIGNAL, alpha: .98, align: 'right' }, pA, 1.14);
+    text('缓存命中 · 每百万 tokens 输入', W - 130, 688, { size: 15, family: 'mono', sp: 1.4, color: BONE, alpha: .85 * pA, align: 'right' });
+  }
+  // the same work, three years apart — a ledger bridged by a rule
+  const cA = P(lt, .9, .6);
+  if (cA > 0) {
+    const y2 = 770;
+    line(150, y2 - 46, 1180, y2 - 46, { w: 1, color: BONE, alpha: .14 * cA });
+    text('三年前，同样的活儿', 150, y2 - 62, { size: 13, family: 'mono', sp: 2.6, color: GRAY, alpha: .8 * cA });
+    text('¥72', 150, y2 + 6, { size: 44, family: 'arch', weight: 900, sp: -2, color: BONE, alpha: .5 * cA });
+    text('现在', 470, y2 - 62, { size: 13, family: 'mono', sp: 2.6, color: GRAY, alpha: .8 * cA });
+    text('¥0.02', 470, y2 + 6, { size: 44, family: 'arch', weight: 900, sp: -2, color: SIGNAL, alpha: .95 * cA });
+    text('贵了 3600 倍', 1180, y2 - 8, { size: 17, family: 'song', color: GRAY, alpha: .9 * cA, align: 'right' });
+  }
+  hud(t, 1 - P(lt, 3.1, .4));
+}
+
+/* ============================================================================
+   08 · ONE LINE — the collapse, the title, the question
+   ========================================================================== */
+function s8a(t, lt) {
+  box(0, 0, W, H, INK);
+  const y = 462;
+  // every horizontal in the film, stacked on the frame, falls into one line
+  const col = oC(P(lt, .0, .95));
+  for (let i = 0; i < 26; i++) {
+    const d = (i - 12.5) / 12.5;                 // -1 .. 1
+    const off = d * 420 * (1 - col);
+    const yy = y + off;
+    if (yy < -20 || yy > H + 20) continue;
+    const wd = (1 - Math.abs(d)) * 0.55 + .45;
+    const inset = (1 - wd) * 560 * (1 - col * .5);
+    const a = (1 - col * .95) * (.42 + .34 * (1 - Math.abs(d)));
+    line(inset, yy, W - inset, yy, { w: 1.4, color: BONE, alpha: a });
+  }
+  // the middle line, drawn last, becomes the subject — and it is already lit on the cut
+  const lp = oQ(P(lt, .02, .85));
+  line(150, y, 150 + 1748 * lp, y, { w: 2.8, color: BONE, alpha: .96 });
+  if (lp > .02 && lp < .995) spark(150 + 1748 * lp, y, 1, 1, t);
+
+  // the eight chapters tick past on the line, as it is drawn
+  const marks = ['01', '02', '03', '04', '05', '06', '07', '08'];
+  for (let i = 0; i < 8; i++) {
+    const mx = 150 + i * (1670 / 7);
+    const a = cl((lp * 1748 - (mx - 150)) / 60);
+    if (a <= .01) continue;
+    line(mx, y - 10, mx, y + 10, { w: 1.4, color: i === 3 ? SIGNAL : BONE, alpha: .55 * a });
+    text(marks[i], mx, y - 20, { size: 10, family: 'mono', sp: 1.4, color: i === 3 ? SIGNAL : GRAY, alpha: .8 * a, align: 'center' });
+  }
+
+  const a1 = P(lt, .75, .5);
+  text('一条线', 150, y + 92, { size: 15, family: 'mono', sp: 6, color: SIGNAL, alpha: .9 * a1 });
+  const a2 = P(lt, .9, .5);
+  text('八章，一个主语', 150, y - 62, { size: 26, family: 'song', color: GRAY, alpha: .9 * a2 });
+  // the closing statement, so the shot is not just an index
+  const a3 = P(lt, 1.05, .45);
+  text('每一条线，最后都指向同一个问题。', 1898, y + 108, { size: 22, family: 'song', color: BONE, alpha: .82 * a3, align: 'right' });
+  cropMarks(cl(P(lt, .95, .4)) * .85, 64, 46);
+  hud(t, 1);
+}
+function s8b(t, lt) {
+  box(0, 0, W, H, INK);
+  const y = 560;
+  line(150, y, 1898, y, { w: 1.4, color: BONE, alpha: .5 });
+
+  const t1 = P(lt, .02, .7);
+  if (t1 > 0) {
+    const e = oX(cl(t1, 0, 1));
+    text('DEEPSEEK', 146, 430, { size: 208, family: 'arch', weight: 900, sp: -9 * lerp(2.2, 1, e), color: BONE, alpha: .98 * cl(.62 + t1 * 1.4) });
+  }
+  const t2 = P(lt, .2, .5);
+  text('2023 — 2026', 150, 500, { size: 22, family: 'mono', sp: 4, color: SIGNAL, alpha: .9 * t2 });
+  text('六代模型，一个方向：用更少的算力，做更多的事', 150, 250, { size: 30, family: 'song', color: BONE, alpha: .9 * P(lt, .3, .5) });
+
+  // the whole film, compressed onto the line
+  const marks = [['2023.07', '起点'], ['2024.05', 'V2'], ['2024.12', 'V3'], ['2025.01', 'R1'],
+                 ['2025.09', 'V3.2'], ['2026.04', 'V4'], ['2026.09', 'V4.1']];
+  for (let i = 0; i < marks.length; i++) {
+    const a = P(lt, .18 + i * .045, .28);
+    if (a <= .01) continue;
+    const x = 150 + i * 258;
+    line(x, y - 12, x, y + 12, { w: 1.4, color: BONE, alpha: .7 * a });
+    dot(x, y, i === 3 ? 4.5 : 3, i === 3 ? SIGNAL : BONE, .9 * a);
+    text(marks[i][0], x + 12, y - 22, { size: 11, family: 'mono', sp: 1.4, color: i === 3 ? SIGNAL : GRAY, alpha: .9 * a });
+    text(marks[i][1], x + 12, y + 34, { size: 14, family: 'song', color: BONE, alpha: .8 * a });
+  }
+  const tail = P(lt, .9, .5);
+  line(150 + 6 * 258, y, 1898, y, { w: 1.4, color: BONE, alpha: .2 * tail });
+  hud(t, 1 - P(lt, 1.4, .3));
+}
+function s8c(t, lt) {
+  box(0, 0, W, H, INK);
+  const y = 300;
+  line(150, y, 150 + 1250 * oC(P(lt, 0, .5)), y, { w: 1.2, color: BONE, alpha: .3 });
+
+  const q = P(lt, .1, .7);
+  rise('还能再便宜一点吗', 146, 470, { size: 62, family: 'song', color: BONE, alpha: .97 }, q);
+  text('how much less compute does intelligence need?', 150, 520,
+    { size: 19, family: 'corm', color: GRAY, alpha: .95 * P(lt, .35, .7) });
+
+  // the spark runs the top rule and dissolves at the index margin, so it never crosses the type
+  const run = oC(P(lt, 1.4, 2.4));
+  const sx = lerp(150, 1440, run);
+  const sa = 1 - cl((sx - 1300) / 130);
+  if (run < .995 && sa > .02) spark(sx, 300, .95 * sa, 1.0 * sa, t);
+
+  // the eight chapters, as an index down the right margin
+  const idx = P(lt, .5, .9);
+  if (idx > 0) {
+    const items = [['01', '起点'], ['02', '稀疏'], ['03', '成本'], ['04', '震荡'],
+                   ['05', '稀疏注意力'], ['06', '上下文'], ['07', '不对称'], ['08', '一条线']];
+    for (let i = 0; i < 8; i++) {
+      const a = idx * cl((idx - i * .09) * 4) * .8;
+      if (a <= .01) continue;
+      const yy = 150 + i * 40;
+      text(items[i][0], 1500, yy, { size: 11, family: 'mono', sp: 2, color: SIGNAL, alpha: a * .85 });
+      text(items[i][1], 1540, yy, { size: 13, family: 'song', color: GRAY, alpha: a * .8 });
+      line(1500, yy + 8, 1900, yy + 8, { w: .7, color: BONE, alpha: a * .07 });
+    }
+    // the closing total: it all got cheaper, three orders of magnitude over
+    const fa = P(lt, 1.4, .7);
+    if (fa > 0) {
+      line(1500, 500, 1900, 500, { w: 1, color: BONE, alpha: .3 * fa });
+      text('同样的活儿', 1500, 534, { size: 12, family: 'mono', sp: 2, color: GRAY, alpha: .8 * fa });
+      text('¥72', 1500, 588, { size: 40, family: 'arch', weight: 900, sp: -2, color: BONE, alpha: .3 * fa });
+      text('→', 1500, 616, { size: 22, family: 'mono', color: GRAY, alpha: .7 * fa });
+      text('¥0.02', 1500, 672, { size: 40, family: 'arch', weight: 900, sp: -2, color: SIGNAL, alpha: .95 * fa });
+    }
+  }
+
+  hud(t, 1);
+}
+
+/* 08d — the close: back to the drafting sheet the film opened on. The line is the same
+   height as the first shot's datum (y = 566), so the last frame rhymes with the first. */
+function s8d(t, lt) {
+  box(0, 0, W, H, INK);
+  const y = 566;
+  Sheet(cl(P(lt, .02, .6)));
+  cropMarks(cl(P(lt, .15, .5)) * .9, 64, 46);
+
+  // the line redraws itself, from the left, and stops exactly where it began
+  const lp = oQ(P(lt, .02, 1.5));
+  line(150, y, 150 + 1748 * lp, y, { w: 2.4, color: BONE, alpha: .95 });
+  if (lp < .995) spark(150 + 1748 * lp, y, 1, .95, t);
+
+  // the eight chapters tick past under the line, each with its date — the film's own index,
+  // laid out like a scale on the sheet
+  const marks = [['2023.07', '起点'], ['2024.05', 'V2'], ['2024.12', 'V3'], ['2025.01', 'R1'],
+                 ['2025.09', 'V3.2'], ['2026.04', 'V4'], ['2026.09', 'V4.1']];
+  for (let i = 0; i < marks.length; i++) {
+    const a = cl((lp * 1748 - i * (1748 / 6.4) - 40) / 90);
+    if (a <= .01) continue;
+    const mx = 150 + i * (1748 / 6.6);
+    line(mx, y + 14, mx, y + 14 + (i === 3 ? 34 : 22), { w: i === 3 ? 2 : 1.2, color: i === 3 ? SIGNAL : BONE, alpha: .55 * a });
+    text(marks[i][0], mx + 8, y + 56, { size: 11, family: 'mono', sp: 1.4, color: i === 3 ? SIGNAL : GRAY, alpha: .85 * a });
+    text(marks[i][1], mx + 8, y + 78, { size: 15, family: 'song', color: i === 3 ? SIGNAL : BONE, alpha: .8 * a });
+  }
+
+  // the two dates that bracket the film, drawn as a dimension across the whole line
+  const a1 = P(lt, .35, .55);
+  text('2023.07.17', 150, y - 60, { size: 88, family: 'arch', weight: 900, sp: -3.6, color: BONE, alpha: .92 * a1 });
+  const a2 = P(lt, .7, .55);
+  text('2026.09.10', 1898, y - 60, { size: 88, family: 'arch', weight: 900, sp: -3.6, color: SIGNAL, alpha: .95 * a2, align: 'right' });
+
+  const a3 = P(lt, 1.05, .55);
+  text('三年，六个模型，同一条线。', 150, y - 150, { size: 34, family: 'song', color: BONE, alpha: .92 * a3 });
+  text('deepseek · 一条线  ·  60 s', 1898, y - 196, { size: 13, family: 'mono', sp: 4, color: GRAY, alpha: .7 * a3, align: 'right' });
+
+  // the sheet's title block, bottom left — the same one the film opened on, one field changed
+  const tb = P(lt, .9, .8);
+  if (tb > 0) {
+    line(150, H - 150, 700, H - 150, { w: 1, color: BONE, alpha: .25 * tb });
+    line(150, H - 96, 700, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(150, H - 150, 150, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(430, H - 150, 430, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(560, H - 150, 560, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    line(700, H - 150, 700, H - 96, { w: 1, color: BONE, alpha: .25 * tb });
+    text('DRAWN BY', 160, H - 128, { size: 8, family: 'mono', sp: 2, color: GRAY, alpha: .8 * tb });
+    text('the same line', 160, H - 110, { size: 12, family: 'mono', sp: .6, color: BONE, alpha: .75 * tb });
+    text('MODELS', 440, H - 128, { size: 8, family: 'mono', sp: 2, color: GRAY, alpha: .8 * tb });
+    text('6', 440, H - 110, { size: 12, family: 'mono', sp: .6, color: SIGNAL, alpha: .9 * tb });
+    text('SHEET', 570, H - 128, { size: 8, family: 'mono', sp: 2, color: GRAY, alpha: .8 * tb });
+    text('08 / 08', 570, H - 110, { size: 12, family: 'mono', sp: .6, color: SIGNAL, alpha: .9 * tb });
+  }
+
+  // the closing credits, bottom right
+  const cr = P(lt, 1.5, .6);
+  if (cr > 0) {
+    text('画面与配乐由代码生成', 1898, H - 92,
+      { size: 11.5, family: 'mono', sp: 1.6, color: GRAY, alpha: .42 * cr, align: 'right' });
+    text('数据：DeepSeek 官方公告 / 技术报告 / 定价页 · Reuters · Yahoo Finance', 1898, H - 70,
+      { size: 11.5, family: 'sans', color: GRAY, alpha: .36 * cr, align: 'right' });
+  }
+  hud(t, 1 - P(lt, 2.9, .6));
+}
+
+/* ============================================================================
+   the edit
+   ========================================================================== */
+const SHOTS = [
+  { id: '1a', t0: 0.0, t1: 2.4, fn: s1a, cam: [[0, 1.0, 0, 0], [2.4, 1.07, -26, 0]] },
+  { id: '1b', t0: 2.4, t1: 4.8, fn: s1b, cam: [[0, 1.03, 0, 0], [2.4, 1.12, 0, 14]] },
+  { id: '2a', t0: 4.8, t1: 7.2, fn: s2a, cam: [[0, 1.04, 80, 0], [2.2, 1.0, -60, 0]] },
+  { id: '2b', t0: 7.2, t1: 8.4, fn: s2b, cam: [[0, 1.0, 0, 0], [1.2, 1.06, -8, -4]] },
+  { id: '2c', t0: 8.4, t1: 10.4, fn: s2c, cam: [[0, 1.08, 0, 0], [2.0, 1.0, 0, 0]] },
+  { id: '2d', t0: 10.4, t1: 12.0, fn: s2d, cam: [[0, 1.0, 0, 0], [1.6, 1.09, 0, -14]] },
+  { id: '3a', t0: 12.0, t1: 16.2, fn: scCost, cam: [[0, 1.0, 0, 0], [4.2, 1.05, 0, -10]] },
+  // the same receipt, three framings: the line items, a push onto the curve, then the total
+  { id: '3b', t0: 16.2, t1: 17.4, fn: scCost, cam: [[0, 1.45, 0, 250], [1.2, 1.5, 0, 268]] },
+  { id: '3c', t0: 17.4, t1: 19.2, fn: scCost, cam: [[0, 1.32, -300, -130], [1.8, 1.36, -360, -155]] },
+  { id: '4a', t0: 19.2, t1: 21.6, fn: s4a, cam: [[0, 1.0, 0, 0], [2.4, 1.08, 0, 0]] },
+  { id: '4b', t0: 21.6, t1: 22.35, fn: s4b, cam: [[0, 1.14, 0, 0], [.75, 1.0, 0, 0]] },
+  { id: '4c', t0: 22.35, t1: 23.5, fn: s4c, cam: [[0, 1.0, 0, 0], [1.15, 1.02, 0, 0]] },
+  { id: '4d', t0: 23.5, t1: 26.0, fn: s4d, cam: [[0, 1.04, 0, 0], [2.5, 1.0, -30, 0]] },
+  { id: '4e', t0: 26.0, t1: 28.8, fn: s4e, cam: [[0, 1.0, 30, 0], [2.8, 1.05, 0, 0]] },
+  { id: '5', t0: 28.8, t1: 32.0, fn: scSparse, cam: [[0, 1.05, -14, 0, -1.1], [3.2, 1.0, 0, 0, .4]] },
+  { id: '5b', t0: 32.0, t1: 33.6, fn: scSparse, cam: [[0, 1.0, 0, 0], [1.6, 1.04, 0, 6]] },
+  { id: '5c', t0: 33.6, t1: 36.0, fn: scSparse, cam: [[0, 1.0, 0, 0], [2.4, 1.05, 0, -8]] },
+  { id: '6a', t0: 36.0, t1: 38.4, fn: s6a, cam: [[0, 1.0, 0, 0], [2.4, 1.05, -20, 0]] },
+  { id: '6b', t0: 38.4, t1: 40.4, fn: s6b, cam: [[0, 1.0, 0, 0], [2.0, 1.03, 0, -6]] },
+  { id: '6c', t0: 40.4, t1: 43.2, fn: s6c, cam: [[0, 1.08, 0, 0], [2.8, 1.0, -20, 0]] },
+  { id: '7a', t0: 43.2, t1: 44.4, fn: s7a, cam: [[0, 1.0, 0, 0], [1.2, 1.1, 0, 0, .6]] },
+  { id: '7b', t0: 44.4, t1: 45.5, fn: s7b, cam: [[0, 1.0, 0, 0], [1.1, 1.03, 0, 0]] },
+  { id: '7c', t0: 45.5, t1: 47.2, fn: s7c, cam: [[0, 1.06, 0, 0], [1.7, 1.0, 0, 0, -.6]] },
+  { id: '7d', t0: 47.2, t1: 50.4, fn: s7d, cam: [[0, 1.02, 40, 0], [3.2, 1.0, -20, 0]] },
+  { id: '8a', t0: 50.4, t1: 51.9, fn: s8a, cam: [[0, 1.02, 0, 0], [1.5, 1.0, 0, 0]] },
+  { id: '8b', t0: 51.9, t1: 53.4, fn: s8b, cam: [[0, 1.0, 0, 0], [1.5, 1.0, 0, 0]] },
+  { id: '8c', t0: 53.4, t1: 56.4, fn: s8c, cam: [[0, 1.0, 0, 0], [3.0, 1.04, 0, 0]] },
+  { id: '8d', t0: 56.4, t1: 60.0, fn: s8d, cam: [[0, 1.04, 0, 0], [3.6, 1.0, 0, 0]] },
+];
+function shotAt(t) {
+  for (const s of SHOTS) if (t >= s.t0 && t < s.t1) return s;
+  return SHOTS[SHOTS.length - 1];
+}
+
+/* ============================================================================
+   frame
+   ========================================================================== */
+function draw(t) {
+  const sh = shotAt(t), lt = t - sh.t0;
+  // A shot's first frame must already be a picture: the reference film cuts on content,
+  // never on an empty frame. Advance the local clock so entry eases have already started.
+  const ls = lt + .12;
+  const c = camAt(sh.cam, Math.max(0, lt));
+  const shk = shakeAt(t);
+
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  g.fillStyle = INK; g.fillRect(0, 0, W, H);
+
+  const wx = noiseAt(t, 1) * .9, wy = noiseAt(t, 2) * .9;
+  const sx = shk ? noiseAt(t, 3) * shk : 0, sy = shk ? noiseAt(t, 4) * shk : 0;
+
+  g.save();
+  g.translate(W / 2 + c.x + wx + sx, H / 2 + c.y + wy + sy);
+  if (c.r) g.rotate(c.r);
+  g.scale(c.z, c.z);
+  g.translate(-W / 2, -H / 2);
+  sh.fn(t, ls);
+  g.restore();
+
+  // grain + vignette
+  g.save();
+  const ox = (Math.round(t * 480) * 37) % 200, oy = (Math.round(t * 611) * 53) % 200;
+  g.globalAlpha = .06; g.globalCompositeOperation = 'overlay';
+  g.translate(-ox, -oy);
+  g.fillStyle = NOISE_PAT; g.fillRect(0, 0, W + 240, H + 240);
+  g.restore();
+  g.save(); g.globalAlpha = .9; g.drawImage(VIGNETTE, 0, 0); g.restore();
+
+  const fade = Math.max(1 - cl(P(t, 0, .4)), cl(P(t, 59.2, .75)));
+  if (fade > .001) { g.fillStyle = `rgba(3,3,4,${fade})`; g.fillRect(0, 0, W, H); }
+  if (t >= 59.97) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); }
+}
+
+window.DEMO = { width: W, height: H, fps: 24, duration: 60, motionBlur: { samples: 4, shutter: 0.5 } };
+window.renderAt = (t) => { draw(cl(t, 0, 59.999)); return true; };
+draw(0);
+window.__ready = true;
+</script>
+</body></html>

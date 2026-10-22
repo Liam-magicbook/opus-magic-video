@@ -1,0 +1,135 @@
+{
+  "bpm": 100,
+  "duration": 60.0,
+  "grid": {
+    "bar": 2.4,
+    "bars": 25
+  },
+  "chapters": [
+    {
+      "id": "origin",
+      "t0": 0.0,
+      "t1": 4.8,
+      "no": "01",
+      "zh": "起点",
+      "en": "ORIGIN"
+    },
+    {
+      "id": "economy",
+      "t0": 4.8,
+      "t1": 12.0,
+      "no": "02",
+      "zh": "稀疏",
+      "en": "ECONOMY"
+    },
+    {
+      "id": "cost",
+      "t0": 12.0,
+      "t1": 19.2,
+      "no": "03",
+      "zh": "成本",
+      "en": "COST"
+    },
+    {
+      "id": "shock",
+      "t0": 19.2,
+      "t1": 28.8,
+      "no": "04",
+      "zh": "震荡",
+      "en": "SHOCK"
+    },
+    {
+      "id": "sparsity",
+      "t0": 28.8,
+      "t1": 36.0,
+      "no": "05",
+      "zh": "稀疏注意力",
+      "en": "SPARSITY"
+    },
+    {
+      "id": "context",
+      "t0": 36.0,
+      "t1": 43.2,
+      "no": "06",
+      "zh": "上下文",
+      "en": "CONTEXT"
+    },
+    {
+      "id": "asymmetry",
+      "t0": 43.2,
+      "t1": 50.4,
+      "no": "07",
+      "zh": "不对称",
+      "en": "ASYMMETRY"
+    },
+    {
+      "id": "line",
+      "t0": 50.4,
+      "t1": 60.0,
+      "no": "08",
+      "zh": "一条线",
+      "en": "ONE LINE"
+    }
+  ],
+  "ev": {
+    "lineIn": 0.0,
+    "date": 2.4,
+    "founding": 3.2,
+    "ch1": 4.8,
+    "comb": 5.15,
+    "experts": [
+      5.6,
+      5.82,
+      6.04,
+      6.26,
+      6.48,
+      6.7
+    ],
+    "stair": 8.4,
+    "price1": 8.45,
+    "price2": 8.95,
+    "kvcache": 10.4,
+    "throughput": 11.2,
+    "ch2": 12.0,
+    "loss": 12.05,
+    "flat": 14.4,
+    "ruler": 16.8,
+    "count": 16.85,
+    "cost": 18.1,
+    "ch3": 19.2,
+    "chart": 19.25,
+    "cliff": 21.6,
+    "hush": 22.35,
+    "silenceEnd": 23.5,
+    "r1date": 23.9,
+    "mit": 25.0,
+    "appstore": 25.95,
+    "nvda": 26.9,
+    "ch4": 28.8,
+    "matrix": 28.85,
+    "sparse": 30.6,
+    "medals": [
+      33.75,
+      34.1,
+      34.45,
+      34.8
+    ],
+    "api50": 35.3,
+    "ch5": 36.0,
+    "stretch": 36.05,
+    "million": 37.2,
+    "fold": 40.4,
+    "ch6": 43.2,
+    "split": 43.25,
+    "gate": 44.4,
+    "decode": 45.5,
+    "cache": 47.2,
+    "price3": 48.8,
+    "collapse": 50.4,
+    "title": 51.9,
+    "question": 53.4,
+    "credits": 55.3,
+    "sparkOut": 56.6,
+    "end": 59.9
+  }
+}

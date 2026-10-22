@@ -1,0 +1,7 @@
+# render scratch — regenerable, and dozens of frames of noise in the diff
+out/stills/
+out/sheet/
+out/idx-v2-backup.html
+
+# the per-film node_modules is a symlink into video_prototype (root .gitignore covers it)
+node_modules
