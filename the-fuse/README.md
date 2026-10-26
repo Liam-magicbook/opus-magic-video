@@ -29,9 +29,9 @@ git clone https://github.com/lemomo-ai/lemo-opuscar
 LIB=/path/to/lemo-opuscar sh build.sh
 ```
 
-Needs Node 20+, ffmpeg, and Python 3 with numpy/scipy. `build.sh` writes the **full 156.7 s film** to
-`the-fuse.mp4` (not checked in — it needs the same Lemo-Opuscar render/mux tools); the 30 s cut is already in the
-repository.
+Needs Node 20+, ffmpeg, and Python 3 with numpy/scipy. If Chromium is not auto-detected, set
+`PLAYWRIGHT_CHROME=/path/to/chrome`. `build.sh` writes the **full 156.7 s film** to `the-fuse.mp4` (not checked in
+— it needs the same Lemo-Opuscar render/mux tools); the 30 s cut is already in the repository.
 
 ## How it is made
 
