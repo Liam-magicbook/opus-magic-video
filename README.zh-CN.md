@@ -1,13 +1,13 @@
 # opus-magic-video
 
-**五支短片，全部由代码渲染出来。** 没有素材库、没有剪辑软件、没有时间轴拖拽——
+**六支短片，全部由代码渲染出来。** 没有素材库、没有剪辑软件、没有时间轴拖拽——
 每一帧都是 `renderAt(t)` 算出来的，配乐由 Python 按同一份事件表合成。
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md) | [Français](README.fr.md)
 
-<img src="docs/preview/hero.gif" width="720" alt="四支片子各取 1.5 秒：纸面 MG / 手绘水花 / 像素冒险 / 半调案卷">
+<img src="docs/preview/hero.gif" width="720" alt="六支里取四支、各 1.5 秒：纸面 MG / 手绘水花 / 像素冒险 / 半调案卷">
 
-<sub>四支各取 1.5 秒拼成。左上 `deepseek-one-line`、右上 `cel-boil-splash`、左下 `pixel-teyvat`、右下 `pdoom`。</sub>
+<sub>六支里取四支，各取 1.5 秒拼成 2×2。左上 `deepseek-one-line`、右上 `cel-boil-splash`、左下 `pixel-teyvat`、右下 `pdoom`。</sub>
 
 ---
 
@@ -20,6 +20,7 @@
 | <img src="docs/preview/cel-boil-splash.jpg" width="260"> | [`cel-boil-splash/`](cel-boil-splash/) | 10s | **逐帧手绘 / line boil**，水花精灵的崩解与重组 | [`out/video.mp4`](cel-boil-splash/out/video.mp4) · 1920×1080 · 36 MB |
 | <img src="docs/preview/pixel-teyvat.jpg" width="260"> | [`pixel-teyvat/`](pixel-teyvat/) | 10s | **320×180 像素冒险 + CRT**，开箱、昼夜交替 | [`out/video.mp4`](pixel-teyvat/out/video.mp4) · 1920×1080 · 13 MB |
 | <img src="docs/preview/pdoom.jpg" width="260"> | [`pdoom/`](pdoom/) | 156s | **复古半调案卷**，47 场景 / 46 句歌词，P(doom) 仪表四次上调 | [`pdoom-web.mp4`](pdoom/pdoom-web.mp4) · 1920×1080 · 79 MB |
+| <img src="docs/preview/the-fuse.jpg" width="260"> | [`the-fuse/`](the-fuse/) | 30s | **街头速写 · 钢笔淡彩**：速写者把世界末日画进本子，一根橙色引线穿过八张跨页，每一笔都卡着歌 | [`the-fuse-30s.mp4`](the-fuse/the-fuse-30s.mp4) · 1920×1080 · 47 MB |
 
 <sub>缩略图由 [`docs/make_preview.sh`](docs/make_preview.sh) 从成片抽帧生成，不是设计稿。</sub>
 
@@ -38,6 +39,9 @@ cues.json ──┬──> index.html   renderAt(t) ──> 逐帧截图 ──>
 
 `pdoom/` 是长片特例：156 秒、音乐已有独立声源，时间轴来自 `data/lyrics.json` 的词级时间戳，
 因此走 `build.sh` 的分块渲染（拟音 → 渲染 → 混流 → 海报 → 字幕）。
+
+`the-fuse/` 是另一种风格的长片特例：完整时间轴同样是 156.7 秒，仓库里放的是 30 秒展示版和完整源码。
+它的钢笔淡彩引擎来自 [Lemo-Opuscar](https://github.com/lemomo-ai/lemo-opuscar)；剪辑、八张跨页与拟音是为本片新做的。
 
 渲染器只有一个：起本地静态服务 → 等 `window.__ready` → 逐帧 `renderAt(t)` → 截图管道喂
 ffmpeg（`tmix` 做运动模糊）→ H.264 + AAC。
@@ -61,6 +65,8 @@ docs/make_preview.sh  从成片重抽缩略图
   `docs/TREATMENT.md` 是导演阐述（章节材质、镜头表、声音设计表）；`out/sheet/` 是逐秒缩略图（不入库）。
 - `deepseek-v41-flash/`、`pixel-teyvat/`、`cel-boil-splash/` — `js/` 放场景模块，`assets/` 放字体与纹理。
 - `pdoom/` — `film/` 是工程本体，`build.sh` 一键重建（拟音 → 渲染 → 混流 → 海报 → 字幕）。
+- `the-fuse/` — `film.js` 是剪辑，`spreads.js` 是八张跨页，`cues.json` / `events.json` 是共用的时间源；
+  `build.sh` 重建完整 156.7 秒成片（需要把 Lemo-Opuscar 放在 `$LIB`）。
 
 ## 跑起来
 

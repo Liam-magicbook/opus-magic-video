@@ -1,14 +1,14 @@
 # opus-magic-video
 
-**5本の短編を、すべてコードから描画しています。** 素材ライブラリも、編集ソフトも、タイムラインの
+**6本の短編を、すべてコードから描画しています。** 素材ライブラリも、編集ソフトも、タイムラインの
 ドラッグもありません——1フレームずつが `renderAt(t)` で計算され、音楽は同じイベント表から
 Python で合成されます。
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語** | [Français](README.fr.md)
 
-<img src="docs/preview/hero.gif" width="720" alt="4本から各1.5秒：紙のMG / 手描きの水しぶき / ピクセル冒険 / ハーフトーンの一件書類">
+<img src="docs/preview/hero.gif" width="720" alt="6本のうち4本から各1.5秒：紙のMG / 手描きの水しぶき / ピクセル冒険 / ハーフトーンの一件書類">
 
-<sub>4本から各1.5秒を2×2に並べたもの。左上 `deepseek-one-line`、右上 `cel-boil-splash`、左下 `pixel-teyvat`、右下 `pdoom`。</sub>
+<sub>6本のうち4本から各1.5秒を2×2に並べたもの。左上 `deepseek-one-line`、右上 `cel-boil-splash`、左下 `pixel-teyvat`、右下 `pdoom`。</sub>
 
 ---
 
@@ -21,6 +21,7 @@ Python で合成されます。
 | <img src="docs/preview/cel-boil-splash.jpg" width="260"> | [`cel-boil-splash/`](cel-boil-splash/) | 10s | **コマ手描き / line boil**、水の精霊が崩れて再構成される | [`out/video.mp4`](cel-boil-splash/out/video.mp4) · 1920×1080 · 36 MB |
 | <img src="docs/preview/pixel-teyvat.jpg" width="260"> | [`pixel-teyvat/`](pixel-teyvat/) | 10s | **320×180 ピクセル冒険 + CRT**、宝箱開封、昼夜の交代 | [`out/video.mp4`](pixel-teyvat/out/video.mp4) · 1920×1080 · 13 MB |
 | <img src="docs/preview/pdoom.jpg" width="260"> | [`pdoom/`](pdoom/) | 156s | **レトロ・ハーフトーンの一件書類**、47シーン / 46行の歌詞、P(doom) メーターが4回上がる | [`pdoom-web.mp4`](pdoom/pdoom-web.mp4) · 1920×1080 · 79 MB |
+| <img src="docs/preview/the-fuse.jpg" width="260"> | [`the-fuse/`](the-fuse/) | 30s | **街のスケッチ · ペンと淡彩**：スケッチする人がノートに世界の終わりを描く。1本のオレンジの導火線が8つの見開きを貫き、すべての線が歌に合わせて引かれる | [`the-fuse-30s.mp4`](the-fuse/the-fuse-30s.mp4) · 1920×1080 · 47 MB |
 
 <sub>サムネイルは [`docs/make_preview.sh`](docs/make_preview.sh) が完成済みの映像から切り出したもので、デザイン画ではありません。</sub>
 
@@ -40,6 +41,11 @@ cues.json ──┬──> index.html   renderAt(t) ──> フレーム単位�
 `pdoom/` は長尺の例外です。156秒、音楽は独立した音源で、タイムラインは `data/lyrics.json` の
 単語単位タイムスタンプに由来します。そのため `build.sh` による分割レンダリング
 （フォーリー → 描画 → 多重化 → ポスター → 字幕）を使います。
+
+`the-fuse/` は別スタイルの長尺例外です。完全なタイムラインも156.7秒ですが、リポジトリには30秒の
+ショーケース版と完全なソースが入っています。ペン＆ウォッシュ・エンジンは
+[Lemo-Opuscar](https://github.com/lemomo-ai/lemo-opuscar) によるもので、編集・8つの見開き・フォーリーは
+本作のために新しく作られました。
 
 レンダラーは1つだけです。ローカル静的サーバーを起動 → `window.__ready` を待つ → `renderAt(t)` を
 逐次実行 → キャプチャを ffmpeg に流す（`tmix` でモーションブラー）→ H.264 + AAC。
@@ -64,6 +70,8 @@ docs/make_preview.sh  完成映像からサムネイルを再抽出
   コンタクトシート（未追跡）。
 - `deepseek-v41-flash/`、`pixel-teyvat/`、`cel-boil-splash/` — `js/` にシーンモジュール、`assets/` にフォントとテクスチャ。
 - `pdoom/` — `film/` がプロジェクト本体。`build.sh` で一括再構築（フォーリー → 描画 → 多重化 → ポスター → 字幕）。
+- `the-fuse/` — `film.js` が編集、`spreads.js` が8つの見開き、`cues.json` / `events.json` が共通の時間源。
+  `build.sh` で完全な156.7秒を再構築（Lemo-Opuscar を `$LIB` に置く）。
 
 ## 動かす
 
@@ -150,7 +158,7 @@ node harness/render.mjs . --out out/video.mp4 --audio out/audio.wav --workers 4
 |---|---|---|---|
 | [mg-styles-15](https://github.com/Vincentwei1021/mg-styles-15) | Vincentwei1021 | **レンダラーと `mgaudio` エンジンの出所**。`harness/render.mjs` と `lib/audio/` はここから直接取得。`cel-boil-splash` は `demos/05-cel-boil` から、`pixel-teyvat` は `demos/20-pixel` から改変、`deepseek-v41-flash` は `demos/19-paperclip` の視覚言語を参考 | MIT |
 | [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft) | Vincentwei1021 | **ショットの語彙**：124枚のレシピカード / 150種のモーション。「このビートをどう撮るか」を引くほうが発明より速い | Apache-2.0 |
-| [lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar) | LemoLab | **59種のコード製映像スタイル**。`pdoom` の `playwright-core` 依存はここを指す。データストーリーテリングと iso-infographic の方向を参考にした | MIT |
+| [lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar) | LemoLab | **59種のコード製映像スタイル**。`pdoom` の `playwright-core` 依存はここを指し、`the-fuse` のペン＆ウォッシュ・エンジンもここから。データストーリーテリングと iso-infographic の方向を参考にした | MIT |
 | [huashu-motion](https://github.com/alchaincyf/huashu-motion) | Huashu | プロダクト発表映像スキルの一連の流れ：脚本を書き、自分で音楽を作り、ブラウザ内で画面を編集 | MIT |
 | [pdoom-video](https://github.com/mexicat/pdoom-video) | Giacomo Magnanini | **生成MVの規範例**：歌詞と同期するタイポグラフィ、決定論的描画。`pdoom/` はそのローカル改変版 | MIT |
 | [openfilm/examples](https://github.com/openfilm/examples) | OpenFilm | 開いて、変えて、描画できる最小構成の作例 | MIT |

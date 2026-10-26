@@ -1,13 +1,13 @@
 # opus-magic-video
 
-**Five short films, every frame rendered from code.** No stock library, no NLE, no timeline dragging —
+**Six short films, every frame rendered from code.** No stock library, no NLE, no timeline dragging —
 each frame is computed by `renderAt(t)`, and the score is synthesized in Python from the same event table.
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [Français](README.fr.md)
 
-<img src="docs/preview/hero.gif" width="720" alt="1.5 seconds from each of four films: paper MG, hand-drawn splash, pixel adventure, halftone case file">
+<img src="docs/preview/hero.gif" width="720" alt="1.5 seconds from four of the six films: paper MG, hand-drawn splash, pixel adventure, halftone case file">
 
-<sub>1.5 s from each of four films, tiled 2×2. Top-left `deepseek-one-line`, top-right `cel-boil-splash`, bottom-left `pixel-teyvat`, bottom-right `pdoom`.</sub>
+<sub>1.5 s from four of the six films, tiled 2×2. Top-left `deepseek-one-line`, top-right `cel-boil-splash`, bottom-left `pixel-teyvat`, bottom-right `pdoom`.</sub>
 
 ---
 
@@ -20,6 +20,7 @@ each frame is computed by `renderAt(t)`, and the score is synthesized in Python 
 | <img src="docs/preview/cel-boil-splash.jpg" width="260"> | [`cel-boil-splash/`](cel-boil-splash/) | 10s | **Frame-by-frame hand drawing / line boil**, a water sprite disintegrates and reforms | [`out/video.mp4`](cel-boil-splash/out/video.mp4) · 1920×1080 · 36 MB |
 | <img src="docs/preview/pixel-teyvat.jpg" width="260"> | [`pixel-teyvat/`](pixel-teyvat/) | 10s | **320×180 pixel adventure + CRT**, chest opening, day-night cycle | [`out/video.mp4`](pixel-teyvat/out/video.mp4) · 1920×1080 · 13 MB |
 | <img src="docs/preview/pdoom.jpg" width="260"> | [`pdoom/`](pdoom/) | 156s | **Retro halftone case file**, 47 scenes / 46 lyric lines, the P(doom) gauge ratchets up four times | [`pdoom-web.mp4`](pdoom/pdoom-web.mp4) · 1920×1080 · 79 MB |
+| <img src="docs/preview/the-fuse.jpg" width="260"> | [`the-fuse/`](the-fuse/) | 30s | **Urban sketch · pen & wash**: a street sketcher draws the apocalypse in his notebook; one orange fuse threads eight spreads, every stroke timed to the song | [`the-fuse-30s.mp4`](the-fuse/the-fuse-30s.mp4) · 1920×1080 · 47 MB |
 
 <sub>Thumbnails are extracted from the finished renders by [`docs/make_preview.sh`](docs/make_preview.sh) — not design mockups.</sub>
 
@@ -40,6 +41,11 @@ without waiting for the whole film.
 `pdoom/` is the long-form exception: 156 seconds, music from an independent source, timeline derived from
 word-level timestamps in `data/lyrics.json`. It therefore uses `build.sh` for chunked rendering
 (foley → render → mux → poster → subtitles).
+
+`the-fuse/` is the same kind of exception in a different style: its full timeline is also 156.7 seconds, but the
+repository carries the 30-second showcase cut plus the complete source. Its pen-and-wash engine comes from
+[Lemo-Opuscar](https://github.com/lemomo-ai/lemo-opuscar); the edit, the eight spreads and the foley are new for
+this film.
 
 There is exactly one renderer: start a local static server → wait for `window.__ready` → step through
 `renderAt(t)` → pipe captures into ffmpeg (`tmix` for motion blur) → H.264 + AAC.
@@ -64,6 +70,8 @@ Per-film conventions (details in each film's `README.md`):
   `out/sheet/` is a per-second contact sheet (not tracked).
 - `deepseek-v41-flash/`, `pixel-teyvat/`, `cel-boil-splash/` — `js/` holds scene modules, `assets/` holds fonts and textures.
 - `pdoom/` — `film/` is the project itself; `build.sh` rebuilds everything (foley → render → mux → poster → subtitles).
+- `the-fuse/` — `film.js` is the edit, `spreads.js` the eight pages, `cues.json` / `events.json` the shared time
+  source; `build.sh` renders the full 156.7 s film (needs a Lemo-Opuscar checkout at `$LIB`).
 
 ## Running it
 
@@ -149,7 +157,7 @@ methodology; this project is a rewrite on top of them:
 |---|---|---|---|
 | [mg-styles-15](https://github.com/Vincentwei1021/mg-styles-15) | Vincentwei1021 | **Source of the renderer and the `mgaudio` engine.** `harness/render.mjs` and `lib/audio/` are taken directly from it; `cel-boil-splash` is adapted from `demos/05-cel-boil`, `pixel-teyvat` from `demos/20-pixel`, and `deepseek-v41-flash` borrows the visual language of `demos/19-paperclip` | MIT |
 | [video-shotcraft](https://github.com/Vincentwei1021/video-shotcraft) | Vincentwei1021 | **Shot vocabulary**: 124 shot recipe cards / 150 motion effects. Looking up "how should this beat be shot" beats inventing it | Apache-2.0 |
-| [lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar) | LemoLab | **59 code-made film styles.** `pdoom`'s `playwright-core` dependency points here; the data-storytelling and iso-infographic directions informed the look | MIT |
+| [lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar) | LemoLab | **59 code-made film styles.** `pdoom`'s `playwright-core` dependency points here; `the-fuse`'s pen-and-wash engine comes from here; the data-storytelling and iso-infographic directions informed the look | MIT |
 | [huashu-motion](https://github.com/alchaincyf/huashu-motion) | Huashu | Complete product-launch skill workflow: write the script, score it yourself, edit the picture in the browser | MIT |
 | [pdoom-video](https://github.com/mexicat/pdoom-video) | Giacomo Magnanini | **The reference generative music video**: word-synced typography, deterministic rendering. `pdoom/` is a local adaptation | MIT |
 | [openfilm/examples](https://github.com/openfilm/examples) | OpenFilm | Minimal projects you can open, change and render | MIT |

@@ -8,7 +8,7 @@ for _p in (os.path.join(_H, 'lib', 'audio'), os.path.join(_H, '..', 'lib', 'audi
     if os.path.isdir(os.path.join(_p, 'mgaudio')):
         sys.path.insert(0, _p); break
 else:
-    raise SystemExit('mgaudio not found (expected claude-lab/lib/audio next to this folder)')
+    raise SystemExit('mgaudio not found (expected ./lib/audio or ../lib/audio next to this folder)')
 
 import numpy as np
 import mgaudio as mg

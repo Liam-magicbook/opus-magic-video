@@ -1,0 +1,7 @@
+# render scratch (regenerable, large)
+out/
+
+# deps
+__pycache__/
+*.pyc
+.DS_Store

@@ -23,7 +23,7 @@
 
 ```bash
 # 1) 配乐 + 音效（锁 cues.json 的事件点，输出 -14 LUFS / TP ≤ -1.0）
-/Users/oceann/Desktop/workspace/claude-lab/pixel-teyvat/.venv/bin/python audio.py
+../.venv/bin/python audio.py
 # → out/audio.wav + out/audio_spec.png
 
 # 2) 预览（纯 HTML，不渲染任何文件）

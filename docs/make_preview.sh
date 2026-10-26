@@ -14,6 +14,7 @@ stills=(
   "cel-boil-splash/out/video.mp4:5.0:cel-boil-splash"
   "pixel-teyvat/out/video.mp4:6.6:pixel-teyvat"
   "pdoom/pdoom-web.mp4:46:pdoom"
+  "the-fuse/the-fuse-30s.mp4:15:the-fuse"
 )
 
 for item in "${stills[@]}"; do
@@ -28,7 +29,7 @@ for item in "${stills[@]}"; do
   echo "  $OUT/$name.jpg"
 done
 
-# hero.gif：四支各取 1.5 秒拼 2x2
+# hero.gif：六支里取四支各取 1.5 秒拼 2x2
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 

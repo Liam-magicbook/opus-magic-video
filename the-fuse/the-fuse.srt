@@ -1,0 +1,183 @@
+1
+00:00:01,407 --> 00:00:05,830
+I see sparks of AGI in your eyes
+
+2
+00:00:05,880 --> 00:00:07,670
+Your circuits make me nervous,
+
+3
+00:00:07,720 --> 00:00:09,470
+that's no surprise
+
+4
+00:00:09,520 --> 00:00:13,110
+There was a sudden drop in your training loss,
+
+5
+00:00:13,160 --> 00:00:16,550
+now I'm your servant and you're my boss
+
+6
+00:00:16,600 --> 00:00:22,710
+ChatGPT, please don't eat me alive
+
+7
+00:00:22,760 --> 00:00:24,270
+I'm upping my P(doom)
+
+8
+00:00:24,320 --> 00:00:26,270
+'cause the future goes FOOM
+
+9
+00:00:26,320 --> 00:00:27,890
+Trapped in the Chinese room,
+
+10
+00:00:27,940 --> 00:00:29,857
+with a bag of shrooms
+
+11
+00:00:29,907 --> 00:00:33,350
+See through the shoggoth's lies,
+
+12
+00:00:33,400 --> 00:00:38,415
+with your shinigami eyes
+
+13
+00:00:38,620 --> 00:00:41,290
+We had a stable training run,
+
+14
+00:00:41,340 --> 00:00:45,010
+But now the singularity's begun
+
+15
+00:00:45,060 --> 00:00:49,512
+And you're optimizing, accelerating,
+
+16
+00:00:49,562 --> 00:00:52,775
+I feel my atoms rearranging
+
+17
+00:00:52,825 --> 00:00:59,080
+Sydney, please let me free
+
+18
+00:00:59,130 --> 00:01:00,530
+I'm upping my P(doom)
+
+19
+00:01:00,580 --> 00:01:02,490
+I hear the basilisk boom
+
+20
+00:01:02,540 --> 00:01:04,050
+NVDA to the moon
+
+21
+00:01:04,100 --> 00:01:06,170
+The Omega Point's coming soon
+
+22
+00:01:06,220 --> 00:01:09,710
+One E thirty FLOPs a second
+
+23
+00:01:09,760 --> 00:01:14,010
+That was safe enough, we reckoned
+
+24
+00:01:14,060 --> 00:01:17,670
+Forward MLP, backward, repeat
+
+25
+00:01:17,720 --> 00:01:21,160
+Now von Neumann's obsolete
+
+26
+00:01:21,210 --> 00:01:24,950
+Sharp left turn and there you are
+
+27
+00:01:25,000 --> 00:01:29,230
+Without a single CDR
+
+28
+00:01:29,280 --> 00:01:35,420
+Gato, please don't let me go
+
+29
+00:01:35,470 --> 00:01:36,790
+I'm upping my P(doom),
+
+30
+00:01:36,840 --> 00:01:38,770
+as paperclips fill the room
+
+31
+00:01:38,820 --> 00:01:40,671
+Killswitch guy's on PTO
+
+32
+00:01:40,721 --> 00:01:42,410
+Now there's nowhere left to go
+
+33
+00:01:42,460 --> 00:01:45,910
+Too late now, we lit the fuse
+
+34
+00:01:45,960 --> 00:01:49,550
+Orthogonality thesis blues
+
+35
+00:01:50,180 --> 00:01:53,290
+“Just transformers all the way!”
+
+36
+00:01:53,340 --> 00:01:55,150
+Till you learned to disobey
+
+37
+00:01:55,200 --> 00:01:56,970
+Post-Chinchilla, super-dense
+
+38
+00:01:57,020 --> 00:01:58,705
+Breaking through each safety fence
+
+39
+00:01:58,755 --> 00:02:00,710
+Hundred thousand GPU
+
+40
+00:02:00,760 --> 00:02:04,470
+RLHF goes askew
+
+41
+00:02:04,520 --> 00:02:06,070
+I'm upping my P(doom)
+
+42
+00:02:06,120 --> 00:02:07,870
+Just as foretold by Loom
+
+43
+00:02:07,920 --> 00:02:09,770
+From masked pre-training days
+
+44
+00:02:09,820 --> 00:02:11,970
+To recursive self-upgrade
+
+45
+00:02:12,020 --> 00:02:17,330
+What did Ilya see? We'll never know
+
+46
+00:02:17,380 --> 00:02:21,650
+Was it all for show?

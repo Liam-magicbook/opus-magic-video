@@ -17,11 +17,11 @@
 ## 现在怎么跑
 
 ```bash
-# 依赖：Chrome（渲染器用 puppeteer-core 驱动本机 Chrome）、ffmpeg、Python 3 + claude-lab/lib/audio
-cd /Users/oceann/Desktop/workspace/claude-lab/deepseek-one-line
+# 依赖：Chrome（渲染器用 puppeteer-core 驱动本机 Chrome）、ffmpeg、Python 3 + ../lib/audio
+cd deepseek-one-line
 
 # 1) 配乐（读 cues.json 的事件时刻，输出 60.000s / −14 LUFS / TP ≤ −1 dBTP）
-../pixel-teyvat/.venv/bin/python audio.py
+../.venv/bin/python audio.py
 #   → out/audio.wav + out/audio_spec.png（频谱图，绿色竖线=音效同步点）
 #   出现 WARN: silence gap 1.25s 是 R1 的静默段，属预期
 
